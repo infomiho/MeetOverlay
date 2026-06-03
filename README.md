@@ -1,6 +1,8 @@
 # MeetOverlay
 
-Personal macOS menu bar app that watches Apple Calendar events and shows a fullscreen overlay when an upcoming event has a Google Meet link.
+Native macOS menu bar app that watches Calendar for Google Meet events, plays a sound, and shows a fullscreen overlay so you never miss the next call.
+
+![MeetOverlay fullscreen reminder](docs/assets/example.jpeg)
 
 ## Run
 
