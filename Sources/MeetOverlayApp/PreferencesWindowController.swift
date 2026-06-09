@@ -25,8 +25,16 @@ final class PreferencesWindowController {
     }
 
     func show() {
+        let now = Date()
+        let preferences = preferencesStore.load()
+        let calendarAccessStatus = calendarEventSource.calendarAccessStatus
+        let calendars = calendarEventSource.calendars()
+        let diagnosticEvents = eventsForDiagnostics(now: now, calendarAccessStatus: calendarAccessStatus)
         let viewModel = PreferencesViewModel(
-            calendars: calendarEventSource.calendars(),
+            calendars: calendars,
+            calendarAccessStatus: calendarAccessStatus,
+            diagnosticEvents: diagnosticEvents,
+            initialPreferences: preferences,
             preferencesStore: preferencesStore,
             loginItemController: loginItemController,
             onPreferencesChanged: onPreferencesChanged
@@ -56,18 +64,37 @@ final class PreferencesWindowController {
         self.viewModel = viewModel
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
+
+    private func eventsForDiagnostics(
+        now: Date,
+        calendarAccessStatus: CalendarAccessDiagnosticState
+    ) -> [CalendarEventSnapshot] {
+        guard calendarAccessStatus == .allowed else {
+            return []
+        }
+
+        let calendar = Calendar.current
+        let startDate = calendar.startOfDay(for: now)
+        let endDate = calendar.date(byAdding: .day, value: 2, to: startDate) ?? now.addingTimeInterval(48 * 60 * 60)
+        return calendarEventSource.events(from: startDate, to: endDate)
+    }
 }
 
 @MainActor
 private final class PreferencesViewModel: ObservableObject {
     let calendars: [CalendarSnapshot]
+    let calendarAccessStatus: CalendarAccessDiagnosticState
+    let diagnosticEvents: [CalendarEventSnapshot]
 
     @Published var selectedCalendarIDs: Set<String>?
     @Published var isOverlayEnabled: Bool
     @Published var hidesFinishedEvents: Bool
     @Published var launchAtLogin: Bool
+    @Published var reminderSoundID: String
     @Published var loginItemStatus: String
     @Published var errorMessage: String?
+
+    let reminderSounds = ReminderSoundCatalog.sounds
 
     var needsStartupAttention: Bool {
         !["Enabled", "Disabled"].contains(loginItemStatus)
@@ -85,6 +112,17 @@ private final class PreferencesViewModel: ObservableObject {
         return "\(selectedCalendarIDs.count) of \(calendars.count) calendars selected."
     }
 
+    var calendarSyncDiagnostic: CalendarSyncDiagnostic {
+        CalendarSyncDiagnostic.summary(
+            calendarAccess: calendarAccessStatus,
+            calendars: calendars,
+            selectedCalendarIDs: selectedCalendarIDs,
+            launchAtLoginStatus: loginItemStatus,
+            now: Date(),
+            events: diagnosticEvents
+        )
+    }
+
     var allVisibleCalendarsSelected: Bool {
         selectedCalendarIDs == nil || selectedCalendarIDs == Set(calendars.map(\.id))
     }
@@ -95,20 +133,25 @@ private final class PreferencesViewModel: ObservableObject {
 
     private let preferencesStore: AppPreferencesStore
     private let loginItemController: LoginItemController
+    private let reminderSoundPlayer = ReminderSoundPlayer()
     private let onPreferencesChanged: () -> Void
 
     init(
         calendars: [CalendarSnapshot],
+        calendarAccessStatus: CalendarAccessDiagnosticState,
+        diagnosticEvents: [CalendarEventSnapshot],
+        initialPreferences: AppPreferences,
         preferencesStore: AppPreferencesStore,
         loginItemController: LoginItemController,
         onPreferencesChanged: @escaping () -> Void
     ) {
-        let preferences = preferencesStore.load()
-
         self.calendars = calendars
-        self.selectedCalendarIDs = preferences.selectedCalendarIDs
-        self.isOverlayEnabled = preferences.isOverlayEnabled
-        self.hidesFinishedEvents = preferences.hidesFinishedEvents
+        self.calendarAccessStatus = calendarAccessStatus
+        self.diagnosticEvents = diagnosticEvents
+        self.selectedCalendarIDs = initialPreferences.selectedCalendarIDs
+        self.isOverlayEnabled = initialPreferences.isOverlayEnabled
+        self.hidesFinishedEvents = initialPreferences.hidesFinishedEvents
+        self.reminderSoundID = initialPreferences.reminderSoundID
         self.launchAtLogin = loginItemController.isEnabled
         self.loginItemStatus = loginItemController.statusText
         self.preferencesStore = preferencesStore
@@ -128,6 +171,15 @@ private final class PreferencesViewModel: ObservableObject {
     func setHidesFinishedEvents(_ isEnabled: Bool) {
         hidesFinishedEvents = isEnabled
         savePreferences()
+    }
+
+    func setReminderSound(_ soundID: String) {
+        reminderSoundID = soundID
+        savePreferences()
+    }
+
+    func previewReminderSound() {
+        reminderSoundPlayer.play(ReminderSoundCatalog.sound(for: reminderSoundID))
     }
 
     func setLaunchAtLogin(_ isEnabled: Bool) {
@@ -170,7 +222,8 @@ private final class PreferencesViewModel: ObservableObject {
             selectedCalendarIDs: selectedCalendarIDs,
             isOverlayEnabled: isOverlayEnabled,
             launchAtLogin: launchAtLogin,
-            hidesFinishedEvents: hidesFinishedEvents
+            hidesFinishedEvents: hidesFinishedEvents,
+            reminderSoundID: reminderSoundID
         )
 
         preferencesStore.save(preferences)
@@ -191,7 +244,8 @@ private struct SettingsView: View {
                 viewModel: viewModel,
                 launchAtLoginBinding: launchAtLoginBinding,
                 overlayBinding: overlayBinding,
-                hidesFinishedEventsBinding: hidesFinishedEventsBinding
+                hidesFinishedEventsBinding: hidesFinishedEventsBinding,
+                reminderSoundBinding: reminderSoundBinding
             )
             .tabItem {
                 Label("General", systemImage: "gearshape")
@@ -222,6 +276,13 @@ private struct SettingsView: View {
         )
     }
 
+    private var reminderSoundBinding: Binding<String> {
+        Binding(
+            get: { viewModel.reminderSoundID },
+            set: { viewModel.setReminderSound($0) }
+        )
+    }
+
     private var launchAtLoginBinding: Binding<Bool> {
         Binding(
             get: { viewModel.launchAtLogin },
@@ -235,6 +296,7 @@ private struct GeneralSettingsView: View {
     let launchAtLoginBinding: Binding<Bool>
     let overlayBinding: Binding<Bool>
     let hidesFinishedEventsBinding: Binding<Bool>
+    let reminderSoundBinding: Binding<String>
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -264,7 +326,26 @@ private struct GeneralSettingsView: View {
                 title: "Reminders",
                 description: "Fullscreen reminders appear only for joinable Google Meet events."
             ) {
-                Toggle("Show fullscreen reminders", isOn: overlayBinding)
+                VStack(alignment: .leading, spacing: MeetOverlayTheme.Spacing.medium) {
+                    Toggle("Show fullscreen reminders", isOn: overlayBinding)
+
+                    HStack(spacing: MeetOverlayTheme.Spacing.small) {
+                        Picker("Sound", selection: reminderSoundBinding) {
+                            ForEach(viewModel.reminderSounds) { sound in
+                                Text(sound.title).tag(sound.id)
+                            }
+                        }
+                        .frame(maxWidth: 280)
+
+                        Button("Preview") {
+                            viewModel.previewReminderSound()
+                        }
+                    }
+
+                    Text("Used by fullscreen reminders. Back-to-back airlock stays silent.")
+                        .font(MeetOverlayTheme.Typography.helper)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             SettingsCard(
@@ -291,23 +372,32 @@ private struct CalendarSettingsView: View {
     @ObservedObject var viewModel: PreferencesViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            SettingsPageHeader(
-                title: "Calendars",
-                subtitle: "Choose which synced calendars can appear in the menu and trigger reminders."
-            )
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SettingsPageHeader(
+                    title: "Calendars",
+                    subtitle: "Choose which synced calendars can appear in the menu and trigger reminders."
+                )
 
-            SettingsCard(
-                systemImage: "calendar",
-                title: "Included Calendars",
-                description: "Using all calendars also includes calendars added later."
-            ) {
-                CalendarSelectionView(viewModel: viewModel)
+                SettingsCard(
+                    systemImage: "calendar",
+                    title: "Included Calendars",
+                    description: "Using all calendars also includes calendars added later."
+                ) {
+                    VStack(alignment: .leading, spacing: MeetOverlayTheme.Spacing.medium) {
+                        if let problem = viewModel.calendarSyncDiagnostic.problem {
+                            CalendarSyncProblemBanner(problem: problem)
+                        }
+
+                        CalendarSelectionView(viewModel: viewModel)
+                    }
+                }
+
+                Spacer()
             }
-
-            Spacer()
+            .padding(MeetOverlayTheme.Spacing.page)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(MeetOverlayTheme.Spacing.page)
     }
 }
 
@@ -389,6 +479,32 @@ private struct SettingsCard<Content: View>: View {
     }
 }
 
+private struct CalendarSyncProblemBanner: View {
+    let problem: CalendarSyncDiagnosticProblem
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: MeetOverlayTheme.Spacing.small) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(MeetOverlayTheme.Typography.helper.weight(.semibold))
+                .foregroundStyle(MeetOverlayTheme.Palette.attention)
+
+            Text(problem.message)
+                .font(MeetOverlayTheme.Typography.helper)
+                .foregroundStyle(.primary)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.inset)
+                .fill(MeetOverlayTheme.Palette.attention.opacity(0.12))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.inset)
+                .stroke(MeetOverlayTheme.Palette.attention.opacity(0.25), lineWidth: 1)
+        )
+    }
+}
+
 private struct CalendarSelectionView: View {
     @ObservedObject var viewModel: PreferencesViewModel
 
@@ -413,17 +529,7 @@ private struct CalendarSelectionView: View {
             }
             .controlSize(.small)
 
-            if viewModel.noCalendarsSelected {
-                Text("Warning: no calendars selected. Meeting reminders will not trigger.")
-                    .font(MeetOverlayTheme.Typography.helper)
-                    .foregroundStyle(MeetOverlayTheme.Palette.warning)
-            }
-
-            if viewModel.calendars.isEmpty {
-                Text("No calendars available. Allow Calendar access in System Settings.")
-                    .font(MeetOverlayTheme.Typography.helper)
-                    .foregroundStyle(.secondary)
-            } else {
+            if !viewModel.calendars.isEmpty {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 10) {
                         ForEach(viewModel.calendars) { calendar in

@@ -6,6 +6,21 @@ import MeetOverlayCore
 final class CalendarEventSource {
     private let eventStore = EKEventStore()
 
+    var calendarAccessStatus: CalendarAccessDiagnosticState {
+        switch EKEventStore.authorizationStatus(for: .event) {
+        case .fullAccess, .authorized:
+            return .allowed
+        case .denied:
+            return .denied
+        case .notDetermined:
+            return .notDetermined
+        case .restricted, .writeOnly:
+            return .restricted
+        @unknown default:
+            return .unknown
+        }
+    }
+
     func requestAccess(completion: @escaping @MainActor (Bool) -> Void) {
         switch EKEventStore.authorizationStatus(for: .event) {
         case .fullAccess, .authorized:

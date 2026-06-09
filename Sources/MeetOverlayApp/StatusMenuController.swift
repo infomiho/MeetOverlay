@@ -32,6 +32,7 @@ final class StatusMenuController: NSObject {
         status: String,
         isEnabled: Bool,
         menuBarTitle: String = "Meet",
+        menuBarUrgency: CalendarMenuBarUrgency = .idle,
         sections: [CalendarMenuSection] = [],
         emptyMessage: String = "No events today or tomorrow",
         showsCalendarSettingsAction: Bool = false
@@ -40,6 +41,7 @@ final class StatusMenuController: NSObject {
         self.emptyMessage = emptyMessage
         self.showsCalendarSettingsAction = showsCalendarSettingsAction
         statusItem.button?.title = menuBarTitle
+        statusItem.button?.contentTintColor = menuBarUrgency == .urgent ? MeetOverlayTheme.Palette.accentColor : nil
         statusItem.button?.setAccessibilityLabel("MeetOverlay, \(menuBarTitle), \(status). Opens meeting menu.")
         rebuildMenu()
     }
@@ -72,14 +74,16 @@ final class StatusMenuController: NSObject {
         menu.addItem(headerItem)
 
         for row in section.rows {
-            let title = "\(row.timeText)  \(row.title)"
+            let title = title(for: row)
             let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
             item.image = NSImage(
                 systemSymbolName: row.hasMeetLink ? "video.fill" : "calendar",
                 accessibilityDescription: row.hasMeetLink ? "Google Meet link" : "Calendar event"
             )
 
-            if let meetURL = row.meetURL {
+            if row.meetLinks.count > 1 {
+                item.submenu = meetLinksMenu(for: row.meetLinks)
+            } else if let meetURL = row.meetURL {
                 item.action = #selector(openMeetLink)
                 item.target = self
                 item.representedObject = meetURL
@@ -89,6 +93,41 @@ final class StatusMenuController: NSObject {
 
             menu.addItem(item)
         }
+    }
+
+    private func meetLinksMenu(for links: [URL]) -> NSMenu {
+        let submenu = NSMenu()
+
+        for (index, link) in links.enumerated() {
+            let linkNumber = index + 1
+            let label = "\(linkNumber): \(GoogleMeetLinkFormatter.roomCode(for: link))"
+            submenu.addItem(meetLinkItem(title: "Open \(label)", action: #selector(openMeetLink), link: link))
+            submenu.addItem(meetLinkItem(title: "Copy \(label)", action: #selector(copyMeetLink), link: link))
+        }
+
+        return submenu
+    }
+
+    private func meetLinkItem(title: String, action: Selector, link: URL) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.representedObject = link
+        return item
+    }
+
+    private func title(for row: CalendarMenuRow) -> String {
+        let title = "\(row.timeText)  \(row.title)"
+        var details: [String] = []
+
+        if let statusText = row.statusText {
+            details.append(statusText)
+        }
+
+        if row.meetLinks.count > 1 {
+            details.append("\(row.meetLinks.count) Meet links")
+        }
+
+        return details.isEmpty ? title : "\(title) - \(details.joined(separator: ", "))"
     }
 
     @objc private func openPreferences() {
@@ -102,5 +141,11 @@ final class StatusMenuController: NSObject {
     @objc private func openMeetLink(_ sender: NSMenuItem) {
         guard let url = sender.representedObject as? URL else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    @objc private func copyMeetLink(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
     }
 }

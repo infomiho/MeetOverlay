@@ -7,7 +7,7 @@ final class MeetingCountdownFormatterTests: XCTestCase {
 
         XCTAssertEqual(
             MeetingCountdownFormatter.text(now: now, startDate: now.addingTimeInterval(119)),
-            "Starts in 2 minutes"
+            "Starts in 2m"
         )
     }
 
@@ -16,7 +16,25 @@ final class MeetingCountdownFormatterTests: XCTestCase {
 
         XCTAssertEqual(
             MeetingCountdownFormatter.text(now: now, startDate: now.addingTimeInterval(60)),
-            "Starts in 1 minute"
+            "Starts in 1m"
+        )
+    }
+
+    func testShowsHoursAndRemainingMinutesBeforeStart() throws {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+
+        XCTAssertEqual(
+            MeetingCountdownFormatter.text(now: now, startDate: now.addingTimeInterval(112 * 60)),
+            "Starts in 1h 52m"
+        )
+    }
+
+    func testShowsSingularHourBeforeStart() throws {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+
+        XCTAssertEqual(
+            MeetingCountdownFormatter.text(now: now, startDate: now.addingTimeInterval(60 * 60)),
+            "Starts in 1h"
         )
     }
 
@@ -34,7 +52,7 @@ final class MeetingCountdownFormatterTests: XCTestCase {
 
         XCTAssertEqual(
             MeetingCountdownFormatter.text(now: now, startDate: now.addingTimeInterval(-90)),
-            "Started 2 minutes ago"
+            "Started 2m ago"
         )
     }
 }

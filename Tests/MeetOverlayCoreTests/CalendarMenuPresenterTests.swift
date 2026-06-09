@@ -28,10 +28,40 @@ final class CalendarMenuPresenterTests: XCTestCase {
         XCTAssertEqual(sections[0].rows[0].timeText, "17:00")
         XCTAssertTrue(sections[0].rows[0].hasMeetLink)
         XCTAssertEqual(sections[0].rows[0].meetURL?.absoluteString, "https://meet.google.com/abc-defg-hij")
+        XCTAssertEqual(sections[0].rows[0].meetLinks.map(\.absoluteString), ["https://meet.google.com/abc-defg-hij"])
         XCTAssertEqual(sections[1].rows[0].title, "Admin day")
         XCTAssertEqual(sections[1].rows[0].timeText, "All-day")
         XCTAssertFalse(sections[1].rows[0].hasMeetLink)
         XCTAssertNil(sections[1].rows[0].meetURL)
+        XCTAssertEqual(sections[1].rows[0].meetLinks, [])
+    }
+
+    func testBuildsRowsWithMultipleUniqueMeetLinks() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 16, minute: 0, calendar: calendar)
+        let event = makeEvent(
+            id: "multi-meet",
+            title: "Planning https://meet.google.com/title-room-abc",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 17, minute: 0, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 18, minute: 0, calendar: calendar),
+            url: URL(string: "https://meet.google.com/url-room-abc"),
+            notes: "Notes https://meet.google.com/notes-room-abc duplicate https://meet.google.com/url-room-abc",
+            location: "Room https://meet.google.com/location-room-abc"
+        )
+
+        let row = try XCTUnwrap(CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .sections(now: now, events: [event])
+            .first?
+            .rows
+            .first)
+
+        XCTAssertEqual(row.meetURL?.absoluteString, "https://meet.google.com/url-room-abc")
+        XCTAssertEqual(row.meetLinks.map(\.absoluteString), [
+            "https://meet.google.com/url-room-abc",
+            "https://meet.google.com/notes-room-abc",
+            "https://meet.google.com/location-room-abc",
+            "https://meet.google.com/title-room-abc"
+        ])
     }
 
     func testMenuBarTitleUsesNextUpcomingTodayEvent() throws {
@@ -41,13 +71,167 @@ final class CalendarMenuPresenterTests: XCTestCase {
             id: "event-1",
             title: "Planning",
             startDate: date(year: 2026, month: 6, day: 3, hour: 16, minute: 20, calendar: calendar),
-            endDate: date(year: 2026, month: 6, day: 3, hour: 17, minute: 0, calendar: calendar)
+            endDate: date(year: 2026, month: 6, day: 3, hour: 17, minute: 0, calendar: calendar),
+            notes: "https://meet.google.com/abc-defg-hij"
         )
 
         let title = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
             .menuBarTitle(now: now, events: [event])
 
-        XCTAssertEqual(title, "Planning in 20 minutes")
+        XCTAssertEqual(title, "Planning 20m")
+    }
+
+    func testMenuBarTitlePrefersUpcomingMeetEventOverCurrentNonMeetEvent() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 13, minute: 0, calendar: calendar)
+        let currentNonMeetEvent = makeEvent(
+            id: "prep",
+            title: "[PREP] Sprint R&R",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 13, minute: 0, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 13, minute: 30, calendar: calendar)
+        )
+        let upcomingMeetEvent = makeEvent(
+            id: "test-event",
+            title: "Test event",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 13, minute: 10, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 13, minute: 30, calendar: calendar),
+            notes: "https://meet.google.com/abc-defg-hij"
+        )
+
+        let title = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .menuBarTitle(now: now, events: [currentNonMeetEvent, upcomingMeetEvent])
+
+        XCTAssertEqual(title, "Test event 10m")
+    }
+
+    func testMenuBarTitleKeepsInProgressMeetAheadOfFutureMeet() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 13, minute: 9, calendar: calendar)
+        let inProgressMeetEvent = makeEvent(
+            id: "old-meet",
+            title: "Old Meet",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 13, minute: 0, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 13, minute: 30, calendar: calendar),
+            notes: "https://meet.google.com/abc-defg-hij"
+        )
+        let upcomingMeetEvent = makeEvent(
+            id: "next-meet",
+            title: "Next Meet",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 13, minute: 10, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 13, minute: 30, calendar: calendar),
+            notes: "https://meet.google.com/xyz-abcd-efg"
+        )
+
+        let title = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .menuBarTitle(now: now, events: [inProgressMeetEvent, upcomingMeetEvent])
+
+        XCTAssertEqual(title, "Old Meet now")
+    }
+
+    func testMenuBarPresentationUsesUpcomingStateOutsideUrgentWindow() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 16, minute: 0, calendar: calendar)
+        let event = makeEvent(
+            id: "event-1",
+            title: "Planning",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 16, minute: 20, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 17, minute: 0, calendar: calendar),
+            notes: "https://meet.google.com/abc-defg-hij"
+        )
+
+        let presentation = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .menuBarPresentation(now: now, events: [event])
+
+        XCTAssertEqual(presentation, CalendarMenuBarPresentation(title: "Planning 20m", urgency: .upcoming))
+    }
+
+    func testMenuBarPresentationUsesUrgentStateNearStart() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 16, minute: 0, calendar: calendar)
+        let event = makeEvent(
+            id: "event-1",
+            title: "Planning",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 16, minute: 4, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 17, minute: 0, calendar: calendar),
+            notes: "https://meet.google.com/abc-defg-hij"
+        )
+
+        let presentation = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .menuBarPresentation(now: now, events: [event])
+
+        XCTAssertEqual(presentation, CalendarMenuBarPresentation(title: "Planning 4m", urgency: .urgent))
+    }
+
+    func testMenuBarPresentationUsesUrgentNowStateForInProgressMeetEvent() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 16, minute: 1, calendar: calendar)
+        let event = makeEvent(
+            id: "event-1",
+            title: "Planning",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 16, minute: 0, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 17, minute: 0, calendar: calendar),
+            notes: "https://meet.google.com/abc-defg-hij"
+        )
+
+        let presentation = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .menuBarPresentation(now: now, events: [event])
+
+        XCTAssertEqual(presentation, CalendarMenuBarPresentation(title: "Planning now", urgency: .urgent))
+    }
+
+    func testMenuBarPresentationUsesIdleStateWithoutUpcomingTodayEvent() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 16, minute: 0, calendar: calendar)
+
+        let presentation = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .menuBarPresentation(now: now, events: [])
+
+        XCTAssertEqual(presentation, CalendarMenuBarPresentation(title: "Meet", urgency: .idle))
+    }
+
+    func testSectionsHighlightHappeningNowAndNextUpWhenMeetIsInProgress() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 14, minute: 5, calendar: calendar)
+        let activeMeet = makeEvent(
+            id: "active-meet",
+            title: "[ALL] Sprint R&R",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 14, minute: 0, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 14, minute: 30, calendar: calendar),
+            notes: "https://meet.google.com/abc-defg-hij"
+        )
+        let nextMeet = makeEvent(
+            id: "next-meet",
+            title: "[DEV] Sprint R&R",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 15, minute: 5, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 15, minute: 30, calendar: calendar),
+            notes: "https://meet.google.com/xyz-abcd-efg"
+        )
+
+        let sections = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .sections(now: now, events: [activeMeet, nextMeet])
+
+        XCTAssertEqual(sections.map(\.title), ["Happening Now", "Next Up"])
+        XCTAssertEqual(sections[0].rows[0].title, "[ALL] Sprint R&R")
+        XCTAssertEqual(sections[0].rows[0].statusText, "now")
+        XCTAssertEqual(sections[1].rows[0].title, "[DEV] Sprint R&R")
+        XCTAssertEqual(sections[1].rows[0].statusText, "in 1h")
+    }
+
+    func testMenuBarTitleShowsHoursAndRemainingMinutesWhenStartIsOverOneHourAway() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 16, minute: 0, calendar: calendar)
+        let event = makeEvent(
+            id: "event-1",
+            title: "Planning",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 17, minute: 52, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 18, minute: 30, calendar: calendar),
+            notes: "https://meet.google.com/abc-defg-hij"
+        )
+
+        let title = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .menuBarTitle(now: now, events: [event])
+
+        XCTAssertEqual(title, "Planning 1h 52m")
     }
 
     func testMenuBarTitleIgnoresAllDayEventsAndUsesNextTimedEvent() throws {
@@ -64,13 +248,14 @@ final class CalendarMenuPresenterTests: XCTestCase {
             id: "dinner",
             title: "Leona večera",
             startDate: date(year: 2026, month: 6, day: 3, hour: 19, minute: 30, calendar: calendar),
-            endDate: date(year: 2026, month: 6, day: 3, hour: 22, minute: 0, calendar: calendar)
+            endDate: date(year: 2026, month: 6, day: 3, hour: 22, minute: 0, calendar: calendar),
+            notes: "https://meet.google.com/abc-defg-hij"
         )
 
         let title = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
             .menuBarTitle(now: now, events: [allDayEvent, timedEvent])
 
-        XCTAssertEqual(title, "Leona večera in 3 hours")
+        XCTAssertEqual(title, "Leona večera 3h")
     }
 
     func testMenuBarTitleIgnoresTomorrowEvents() throws {
@@ -96,13 +281,14 @@ final class CalendarMenuPresenterTests: XCTestCase {
             id: "event-1",
             title: "1234567890123456789012345",
             startDate: date(year: 2026, month: 6, day: 3, hour: 16, minute: 20, calendar: calendar),
-            endDate: date(year: 2026, month: 6, day: 3, hour: 17, minute: 0, calendar: calendar)
+            endDate: date(year: 2026, month: 6, day: 3, hour: 17, minute: 0, calendar: calendar),
+            notes: "https://meet.google.com/abc-defg-hij"
         )
 
         let title = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
             .menuBarTitle(now: now, events: [event])
 
-        XCTAssertEqual(title, "123456789012345678901... in 20 minutes")
+        XCTAssertEqual(title, "123456789012345678901... 20m")
     }
 
     func testHidesFinishedEventsFromSectionsWhenEnabled() throws {
@@ -155,7 +341,9 @@ final class CalendarMenuPresenterTests: XCTestCase {
         startDate: Date,
         endDate: Date,
         isAllDay: Bool = false,
-        notes: String? = nil
+        url: URL? = nil,
+        notes: String? = nil,
+        location: String? = nil
     ) -> CalendarEventSnapshot {
         CalendarEventSnapshot(
             id: id,
@@ -164,9 +352,9 @@ final class CalendarMenuPresenterTests: XCTestCase {
             endDate: endDate,
             isAllDay: isAllDay,
             participationStatus: .accepted,
-            url: nil,
+            url: url,
             notes: notes,
-            location: nil
+            location: location
         )
     }
 

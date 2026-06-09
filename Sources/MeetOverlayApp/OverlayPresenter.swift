@@ -5,12 +5,51 @@ import SwiftUI
 @MainActor
 final class OverlayPresenter {
     private var windows: [NSWindow] = []
-    private var notificationSound: NSSound?
+    private let reminderSoundPlayer = ReminderSoundPlayer()
 
-    func show(meeting: JoinableMeeting, onJoin: @escaping () -> Void, onDismiss: @escaping () -> Void) {
+    func show(
+        meeting: JoinableMeeting,
+        reminderSound: ReminderSound,
+        onJoin: @escaping () -> Void,
+        onSnooze: @escaping (TimeInterval) -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
         hide()
-        playNotificationSound()
+        reminderSoundPlayer.play(reminderSound)
 
+        present(
+            MeetingOverlayView(
+                meeting: meeting,
+                onJoin: onJoin,
+                onSnooze: onSnooze,
+                onDismiss: onDismiss
+            ),
+            onDismiss: onDismiss
+        )
+    }
+
+    func showAirlock(
+        transition: BackToBackTransition,
+        onJoin: @escaping () -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
+        hide()
+        present(
+            BackToBackAirlockView(
+                transition: transition,
+                onJoin: onJoin,
+                onDismiss: onDismiss
+            ),
+            onDismiss: onDismiss
+        )
+    }
+
+    func hide() {
+        windows.forEach { $0.close() }
+        windows.removeAll()
+    }
+
+    private func present<Content: View>(_ contentView: Content, onDismiss: @escaping () -> Void) {
         for screen in NSScreen.screens {
             let window = OverlayWindow(
                 contentRect: screen.frame,
@@ -25,13 +64,7 @@ final class OverlayPresenter {
             window.backgroundColor = .clear
             window.isOpaque = false
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(
-                rootView: MeetingOverlayView(
-                    meeting: meeting,
-                    onJoin: onJoin,
-                    onDismiss: onDismiss
-                )
-            )
+            window.contentView = NSHostingView(rootView: contentView)
 
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
@@ -41,21 +74,6 @@ final class OverlayPresenter {
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
-    func hide() {
-        windows.forEach { $0.close() }
-        windows.removeAll()
-    }
-
-    private func playNotificationSound() {
-        guard let url = Bundle.main.url(forResource: "notification", withExtension: "mp3") else {
-            return
-        }
-
-        let sound = notificationSound ?? NSSound(contentsOf: url, byReference: false)
-        notificationSound = sound
-        sound?.stop()
-        sound?.play()
-    }
 }
 
 @MainActor
@@ -82,6 +100,7 @@ private final class OverlayWindow: NSWindow {
 private struct MeetingOverlayView: View {
     let meeting: JoinableMeeting
     let onJoin: () -> Void
+    let onSnooze: (TimeInterval) -> Void
     let onDismiss: () -> Void
 
     var body: some View {
@@ -94,87 +113,68 @@ private struct MeetingOverlayView: View {
             .ignoresSafeArea()
 
             VStack(spacing: MeetOverlayTheme.Spacing.overlayContent) {
-                Image(systemName: "video.fill")
-                    .font(.system(size: 32, weight: .bold))
-                    .foregroundStyle(MeetOverlayTheme.Palette.overlayText)
-                    .frame(
-                        width: MeetOverlayTheme.Size.overlayIconBadge,
-                        height: MeetOverlayTheme.Size.overlayIconBadge
-                    )
-                    .background(
-                        Circle()
-                            .fill(MeetOverlayTheme.Palette.accent.opacity(0.22))
-                    )
-                    .overlay(
-                        Circle()
-                            .stroke(MeetOverlayTheme.Palette.accent.opacity(0.45), lineWidth: 1)
-                    )
-
-                VStack(spacing: 10) {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(meeting.startDate > context.date ? "Meeting starts soon" : "Meeting started")
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    VStack(spacing: 12) {
+                        Text(MeetingCountdownFormatter.text(now: context.date, startDate: meeting.startDate))
                             .font(MeetOverlayTheme.Typography.overlayStatus)
+                            .foregroundStyle(MeetOverlayTheme.Palette.accent)
+
+                        Text(meeting.title)
+                            .font(MeetOverlayTheme.Typography.overlayTitle)
+                            .foregroundStyle(MeetOverlayTheme.Palette.overlayText)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.5)
+
+                        Label(timeRangeText, systemImage: "clock")
+                            .font(MeetOverlayTheme.Typography.overlayMetadata)
                             .foregroundStyle(MeetOverlayTheme.Palette.overlaySecondaryText)
                     }
-
-                    Text(meeting.title)
-                        .font(MeetOverlayTheme.Typography.overlayTitle)
-                        .foregroundStyle(MeetOverlayTheme.Palette.overlayText)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(3)
-                        .minimumScaleFactor(0.45)
                 }
 
-                HStack(spacing: 14) {
-                    Label(timeRangeText, systemImage: "clock")
-
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(MeetingCountdownFormatter.text(now: context.date, startDate: meeting.startDate))
-                    }
-                }
-                .font(MeetOverlayTheme.Typography.overlayMetadata)
-                .foregroundStyle(MeetOverlayTheme.Palette.overlaySecondaryText)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 10)
-                .background(
-                    Capsule()
-                        .fill(MeetOverlayTheme.Palette.overlayPanel)
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(MeetOverlayTheme.Palette.overlayPanelBorder, lineWidth: 1)
-                )
-
-                HStack(spacing: 14) {
+                HStack(spacing: 12) {
                     Button(action: onJoin) {
-                        Text("Join Meeting")
+                        Text(meeting.meetLinks.count > 1 ? "Join First Room" : "Join Room")
                             .font(MeetOverlayTheme.Typography.overlayButton.weight(.bold))
-                            .padding(.horizontal, 34)
-                            .padding(.vertical, 18)
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 38)
+                            .padding(.vertical, 17)
+                            .frame(minWidth: 172)
+                            .background(
+                                Capsule()
+                                    .fill(MeetOverlayTheme.Palette.accent)
+                            )
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.plain)
                     .keyboardShortcut(.defaultAction)
 
-                    Button(action: onDismiss) {
-                        Text("Dismiss for This Meeting")
-                            .font(MeetOverlayTheme.Typography.overlayButton)
-                            .padding(.horizontal, 26)
-                            .padding(.vertical, 18)
+                    secondaryButton("Snooze 1m") {
+                        onSnooze(60)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
+
+                    secondaryButton("Snooze 5m") {
+                        onSnooze(5 * 60)
+                    }
+
+                    Button(action: onDismiss) {
+                        secondaryButtonLabel("Dismiss")
+                    }
+                    .buttonStyle(.plain)
                     .keyboardShortcut(.cancelAction)
                 }
-                .padding(.top, 14)
+                .padding(.top, 4)
 
-                Text("Return joins. Esc dismisses this reminder.")
+                if meeting.meetLinks.count > 1 {
+                    MeetLinkRescueView(links: meeting.meetLinks)
+                }
+
+                Text(meeting.meetLinks.count > 1 ? "Return joins the first room. Esc dismisses this reminder." : "Return joins the room. Esc dismisses this reminder.")
                     .font(MeetOverlayTheme.Typography.overlayHint)
                     .foregroundStyle(MeetOverlayTheme.Palette.overlayTertiaryText)
             }
             .padding(.horizontal, MeetOverlayTheme.Spacing.overlayPanelHorizontal)
             .padding(.vertical, MeetOverlayTheme.Spacing.overlayPanelVertical)
-            .frame(maxWidth: 980)
+            .frame(maxWidth: 840)
             .background(
                 RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.overlayPanel)
                     .fill(MeetOverlayTheme.Palette.overlayPanel)
@@ -183,7 +183,7 @@ private struct MeetingOverlayView: View {
                 RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.overlayPanel)
                     .stroke(MeetOverlayTheme.Palette.overlayPanelBorder, lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.35), radius: 38, y: 22)
+            .shadow(color: .black.opacity(0.28), radius: 30, y: 18)
             .padding(48)
         }
         .tint(MeetOverlayTheme.Palette.accent)
@@ -195,5 +195,183 @@ private struct MeetingOverlayView: View {
         formatter.timeStyle = .short
         formatter.dateStyle = .none
         return "\(formatter.string(from: meeting.startDate)) to \(formatter.string(from: meeting.endDate))"
+    }
+
+    private func secondaryButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            secondaryButtonLabel(title)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func secondaryButtonLabel(_ title: String) -> some View {
+        Text(title)
+            .font(MeetOverlayTheme.Typography.overlaySecondaryButton)
+            .foregroundStyle(MeetOverlayTheme.Palette.overlaySecondaryText)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .frame(minWidth: 112)
+            .background(
+                Capsule()
+                    .fill(MeetOverlayTheme.Palette.overlayPanel)
+            )
+            .overlay(
+                Capsule()
+                    .stroke(MeetOverlayTheme.Palette.overlayPanelBorder, lineWidth: 1)
+            )
+    }
+}
+
+private struct BackToBackAirlockView: View {
+    let transition: BackToBackTransition
+    let onJoin: () -> Void
+    let onDismiss: () -> Void
+
+    private var nextMeeting: JoinableMeeting {
+        transition.nextMeeting
+    }
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [MeetOverlayTheme.Palette.overlayStart, MeetOverlayTheme.Palette.overlayEnd],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    VStack(spacing: 10) {
+                        Text(MeetingCountdownFormatter.text(now: context.date, startDate: nextMeeting.startDate))
+                            .font(MeetOverlayTheme.Typography.overlayStatus)
+                            .foregroundStyle(MeetOverlayTheme.Palette.accent)
+
+                        Text(nextMeeting.title)
+                            .font(MeetOverlayTheme.Typography.overlayTitle)
+                            .foregroundStyle(MeetOverlayTheme.Palette.overlayText)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.55)
+
+                        Label(timeRangeText, systemImage: "clock")
+                            .font(MeetOverlayTheme.Typography.overlayMetadata)
+                            .foregroundStyle(MeetOverlayTheme.Palette.overlaySecondaryText)
+                    }
+                }
+
+                Text("Close notes. Join when ready.")
+                    .font(MeetOverlayTheme.Typography.overlayHint)
+                    .foregroundStyle(MeetOverlayTheme.Palette.overlayTertiaryText)
+
+                HStack(spacing: 12) {
+                    Button(action: onJoin) {
+                        Text("Join Next Room")
+                            .font(MeetOverlayTheme.Typography.overlayButton.weight(.bold))
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 38)
+                            .padding(.vertical, 17)
+                            .frame(minWidth: 210)
+                            .background(Capsule().fill(MeetOverlayTheme.Palette.accent))
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.defaultAction)
+
+                    Button(action: onDismiss) {
+                        secondaryButtonLabel("Dismiss")
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.cancelAction)
+                }
+                .padding(.top, 4)
+            }
+            .padding(.horizontal, MeetOverlayTheme.Spacing.overlayPanelHorizontal)
+            .padding(.vertical, MeetOverlayTheme.Spacing.overlayPanelVertical)
+            .frame(maxWidth: 780)
+            .background(
+                RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.overlayPanel)
+                    .fill(MeetOverlayTheme.Palette.overlayPanel)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.overlayPanel)
+                    .stroke(MeetOverlayTheme.Palette.overlayPanelBorder, lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.28), radius: 30, y: 18)
+            .padding(48)
+        }
+        .tint(MeetOverlayTheme.Palette.accent)
+        .onExitCommand(perform: onDismiss)
+    }
+
+    private var timeRangeText: String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return "\(formatter.string(from: nextMeeting.startDate)) to \(formatter.string(from: nextMeeting.endDate))"
+    }
+
+    private func secondaryButtonLabel(_ title: String) -> some View {
+        Text(title)
+            .font(MeetOverlayTheme.Typography.overlaySecondaryButton)
+            .foregroundStyle(MeetOverlayTheme.Palette.overlaySecondaryText)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .frame(minWidth: 112)
+            .background(Capsule().fill(MeetOverlayTheme.Palette.overlayPanel))
+            .overlay(
+                Capsule()
+                    .stroke(MeetOverlayTheme.Palette.overlayPanelBorder, lineWidth: 1)
+            )
+    }
+}
+
+private struct MeetLinkRescueView: View {
+    let links: [URL]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Multiple Meet links detected")
+                .font(MeetOverlayTheme.Typography.overlayHint.weight(.semibold))
+                .foregroundStyle(MeetOverlayTheme.Palette.overlaySecondaryText)
+
+            ForEach(Array(links.enumerated()), id: \.offset) { index, link in
+                HStack(spacing: 10) {
+                    Text("Room \(index + 1): \(GoogleMeetLinkFormatter.roomCode(for: link))")
+                        .font(MeetOverlayTheme.Typography.overlayHint)
+                        .foregroundStyle(MeetOverlayTheme.Palette.overlaySecondaryText)
+
+                    Spacer()
+
+                    Button("Open") {
+                        open(link)
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button("Copy") {
+                        copy(link)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: 520)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(MeetOverlayTheme.Palette.overlayPanel)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(MeetOverlayTheme.Palette.overlayPanelBorder, lineWidth: 1)
+        )
+    }
+
+    private func open(_ link: URL) {
+        NSWorkspace.shared.open(link)
+    }
+
+    private func copy(_ link: URL) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(link.absoluteString, forType: .string)
     }
 }
