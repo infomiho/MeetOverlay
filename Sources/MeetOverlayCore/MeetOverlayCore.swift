@@ -780,7 +780,7 @@ public enum MeetingCountdownFormatter {
 private enum CountdownDurationFormatter {
     static func text(seconds: Int) -> String {
         if seconds < 60 {
-            return unitText(seconds, singular: "second")
+            return "\(seconds)s"
         }
 
         let minutes = Int(ceil(Double(seconds) / 60))
@@ -799,9 +799,6 @@ private enum CountdownDurationFormatter {
         return "\(hourText) \(remainingMinutes)m"
     }
 
-    private static func unitText(_ count: Int, singular: String) -> String {
-        "\(count) \(count == 1 ? singular : "\(singular)s")"
-    }
 }
 
 public enum GoogleMeetLinkFormatter {

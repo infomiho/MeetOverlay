@@ -5,6 +5,11 @@ enum MeetOverlayTheme {
     enum Palette {
         static let accentColor = NSColor(red: 1, green: 0.8, blue: 0, alpha: 1)
         static let accent = Color(nsColor: accentColor)
+        static let menuBarUrgentColor = NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+                ? accentColor
+                : NSColor(red: 0.62, green: 0.47, blue: 0, alpha: 1)
+        }
         static let settingsBackground = Color(nsColor: .windowBackgroundColor)
         static let cardBackground = Color(nsColor: .controlBackgroundColor)
         static let insetBackground = Color(nsColor: .textBackgroundColor).opacity(0.42)
@@ -14,6 +19,7 @@ enum MeetOverlayTheme {
         static let warning = Color(nsColor: .systemRed)
         static let attention = Color(nsColor: .systemOrange)
 
+        static let overlayScrim = Color.black.opacity(0.45)
         static let overlayStart = Color.black.opacity(0.93)
         static let overlayEnd = Color(red: 0.025, green: 0.035, blue: 0.055).opacity(0.98)
         static let overlayPanel = Color.white.opacity(0.08)

@@ -27,3 +27,6 @@ MeetOverlay uses a native macOS utility style: quiet settings, clear calendar hi
 - Settings cards use the shared card surface and icon badge treatment.
 - Calendar lists use the shared inset surface.
 - The overlay uses a fixed dark backdrop, bright yellow emphasis, a compact panel, and a single action row.
+- The overlay panel appears on the active screen only; other displays get a light scrim so reference material stays readable.
+- The overlay countdown turns to the attention color once the meeting has started.
+- Menu bar urgency uses the dynamic urgent color so it stays legible in light and dark menu bars.

@@ -18,6 +18,7 @@ final class StatusMenuController: NSObject {
     override init() {
         super.init()
 
+        menu.autoenablesItems = false
         statusItem.button?.title = "Meet"
         statusItem.button?.setAccessibilityLabel("MeetOverlay")
         statusItem.button?.setAccessibilityHelp("Opens upcoming calendar events and meeting reminder settings.")
@@ -41,7 +42,7 @@ final class StatusMenuController: NSObject {
         self.emptyMessage = emptyMessage
         self.showsCalendarSettingsAction = showsCalendarSettingsAction
         statusItem.button?.title = menuBarTitle
-        statusItem.button?.contentTintColor = menuBarUrgency == .urgent ? MeetOverlayTheme.Palette.accentColor : nil
+        statusItem.button?.contentTintColor = menuBarUrgency == .urgent ? MeetOverlayTheme.Palette.menuBarUrgentColor : nil
         statusItem.button?.setAccessibilityLabel("MeetOverlay, \(menuBarTitle), \(status). Opens meeting menu.")
         rebuildMenu()
     }

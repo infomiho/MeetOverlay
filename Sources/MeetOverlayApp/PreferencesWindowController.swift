@@ -8,6 +8,7 @@ final class PreferencesWindowController {
     private let preferencesStore: AppPreferencesStore
     private let loginItemController: LoginItemController
     private let onPreferencesChanged: () -> Void
+    private let onPreviewReminder: () -> Void
 
     private var window: NSWindow?
     private var viewModel: PreferencesViewModel?
@@ -16,12 +17,14 @@ final class PreferencesWindowController {
         calendarEventSource: CalendarEventSource,
         preferencesStore: AppPreferencesStore,
         loginItemController: LoginItemController,
-        onPreferencesChanged: @escaping () -> Void
+        onPreferencesChanged: @escaping () -> Void,
+        onPreviewReminder: @escaping () -> Void
     ) {
         self.calendarEventSource = calendarEventSource
         self.preferencesStore = preferencesStore
         self.loginItemController = loginItemController
         self.onPreferencesChanged = onPreferencesChanged
+        self.onPreviewReminder = onPreviewReminder
     }
 
     func show() {
@@ -37,7 +40,8 @@ final class PreferencesWindowController {
             initialPreferences: preferences,
             preferencesStore: preferencesStore,
             loginItemController: loginItemController,
-            onPreferencesChanged: onPreferencesChanged
+            onPreferencesChanged: onPreferencesChanged,
+            onPreviewReminder: onPreviewReminder
         )
         let contentView = SettingsView(viewModel: viewModel)
 
@@ -135,6 +139,7 @@ private final class PreferencesViewModel: ObservableObject {
     private let loginItemController: LoginItemController
     private let reminderSoundPlayer = ReminderSoundPlayer()
     private let onPreferencesChanged: () -> Void
+    private let onPreviewReminder: () -> Void
 
     init(
         calendars: [CalendarSnapshot],
@@ -143,7 +148,8 @@ private final class PreferencesViewModel: ObservableObject {
         initialPreferences: AppPreferences,
         preferencesStore: AppPreferencesStore,
         loginItemController: LoginItemController,
-        onPreferencesChanged: @escaping () -> Void
+        onPreferencesChanged: @escaping () -> Void,
+        onPreviewReminder: @escaping () -> Void
     ) {
         self.calendars = calendars
         self.calendarAccessStatus = calendarAccessStatus
@@ -157,6 +163,7 @@ private final class PreferencesViewModel: ObservableObject {
         self.preferencesStore = preferencesStore
         self.loginItemController = loginItemController
         self.onPreferencesChanged = onPreferencesChanged
+        self.onPreviewReminder = onPreviewReminder
     }
 
     func isCalendarSelected(_ calendarID: String) -> Bool {
@@ -180,6 +187,10 @@ private final class PreferencesViewModel: ObservableObject {
 
     func previewReminderSound() {
         reminderSoundPlayer.play(ReminderSoundCatalog.sound(for: reminderSoundID))
+    }
+
+    func previewReminder() {
+        onPreviewReminder()
     }
 
     func setLaunchAtLogin(_ isEnabled: Bool) {
@@ -299,72 +310,87 @@ private struct GeneralSettingsView: View {
     let reminderSoundBinding: Binding<String>
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            SettingsPageHeader(
-                title: "General",
-                subtitle: "Keep the menu quiet and the reminder behavior predictable."
-            )
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                SettingsPageHeader(
+                    title: "General",
+                    subtitle: "Keep the menu quiet and the reminder behavior predictable."
+                )
 
-            SettingsCard(
-                systemImage: "power",
-                title: "Startup",
-                description: "Control whether MeetOverlay is ready after sign-in."
-            ) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Toggle("Open at Login", isOn: launchAtLoginBinding)
+                SettingsCard(
+                    systemImage: "power",
+                    title: "Startup",
+                    description: "Control whether MeetOverlay is ready after sign-in."
+                ) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Toggle("Open at Login", isOn: launchAtLoginBinding)
 
-                    if viewModel.needsStartupAttention {
-                        Text("Startup: \(viewModel.loginItemStatus)")
-                            .font(MeetOverlayTheme.Typography.helper.weight(.medium))
-                            .foregroundStyle(MeetOverlayTheme.Palette.attention)
+                        if viewModel.needsStartupAttention {
+                            Text("Startup: \(viewModel.loginItemStatus)")
+                                .font(MeetOverlayTheme.Typography.helper.weight(.medium))
+                                .foregroundStyle(MeetOverlayTheme.Palette.attention)
+                        }
                     }
                 }
-            }
 
-            SettingsCard(
-                systemImage: "bell.and.waves.left.and.right",
-                title: "Reminders",
-                description: "Fullscreen reminders appear only for joinable Google Meet events."
-            ) {
-                VStack(alignment: .leading, spacing: MeetOverlayTheme.Spacing.medium) {
-                    Toggle("Show fullscreen reminders", isOn: overlayBinding)
+                SettingsCard(
+                    systemImage: "bell.and.waves.left.and.right",
+                    title: "Reminders",
+                    description: "Fullscreen reminders appear only for joinable Google Meet events."
+                ) {
+                    VStack(alignment: .leading, spacing: MeetOverlayTheme.Spacing.medium) {
+                        Toggle("Show fullscreen reminders", isOn: overlayBinding)
 
-                    HStack(spacing: MeetOverlayTheme.Spacing.small) {
-                        Picker("Sound", selection: reminderSoundBinding) {
-                            ForEach(viewModel.reminderSounds) { sound in
-                                Text(sound.title).tag(sound.id)
+                        HStack(spacing: MeetOverlayTheme.Spacing.small) {
+                            Picker("Sound", selection: reminderSoundBinding) {
+                                ForEach(viewModel.reminderSounds) { sound in
+                                    Text(sound.title).tag(sound.id)
+                                }
+                            }
+                            .frame(maxWidth: 280)
+
+                            Button("Preview") {
+                                viewModel.previewReminderSound()
                             }
                         }
-                        .frame(maxWidth: 280)
 
-                        Button("Preview") {
-                            viewModel.previewReminderSound()
+                        Text("Used by fullscreen reminders. Back-to-back airlock stays silent.")
+                            .font(MeetOverlayTheme.Typography.helper)
+                            .foregroundStyle(.secondary)
+
+                        Button("Show Sample Reminder") {
+                            viewModel.previewReminder()
                         }
                     }
-
-                    Text("Used by fullscreen reminders. Back-to-back airlock stays silent.")
-                        .font(MeetOverlayTheme.Typography.helper)
-                        .foregroundStyle(.secondary)
                 }
-            }
 
-            SettingsCard(
-                systemImage: "menubar.rectangle",
-                title: "Menu",
-                description: "Keep the menu focused on events that still matter."
-            ) {
-                Toggle("Hide finished events", isOn: hidesFinishedEventsBinding)
-            }
+                SettingsCard(
+                    systemImage: "menubar.rectangle",
+                    title: "Menu",
+                    description: "Keep the menu focused on events that still matter."
+                ) {
+                    Toggle("Hide finished events", isOn: hidesFinishedEventsBinding)
+                }
 
-            if let errorMessage = viewModel.errorMessage {
-                Text(errorMessage)
-                    .font(MeetOverlayTheme.Typography.helper)
-                    .foregroundStyle(MeetOverlayTheme.Palette.warning)
-            }
+                SettingsCard(
+                    systemImage: "stethoscope",
+                    title: "Sync Doctor",
+                    description: "Whether MeetOverlay is ready to catch your next meeting."
+                ) {
+                    SyncDoctorView(diagnostic: viewModel.calendarSyncDiagnostic)
+                }
 
-            Spacer()
+                if let errorMessage = viewModel.errorMessage {
+                    Text(errorMessage)
+                        .font(MeetOverlayTheme.Typography.helper)
+                        .foregroundStyle(MeetOverlayTheme.Palette.warning)
+                }
+
+                Spacer()
+            }
+            .padding(MeetOverlayTheme.Spacing.page)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(MeetOverlayTheme.Spacing.page)
     }
 }
 
@@ -476,6 +502,42 @@ private struct SettingsCard<Content: View>: View {
             RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.card)
                 .stroke(MeetOverlayTheme.Palette.border, lineWidth: 1)
         )
+    }
+}
+
+private struct SyncDoctorView: View {
+    let diagnostic: CalendarSyncDiagnostic
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MeetOverlayTheme.Spacing.small) {
+            if let problem = diagnostic.problem {
+                CalendarSyncProblemBanner(problem: problem)
+            }
+
+            SyncDoctorRow(item: diagnostic.calendarAccess)
+            SyncDoctorRow(item: diagnostic.includedCalendars)
+            SyncDoctorRow(item: diagnostic.launchAtLogin)
+            SyncDoctorRow(item: diagnostic.nextMeet)
+        }
+    }
+}
+
+private struct SyncDoctorRow: View {
+    let item: CalendarSyncDiagnosticItem
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: MeetOverlayTheme.Spacing.medium) {
+            Text(item.title)
+                .font(MeetOverlayTheme.Typography.helper)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Text(item.value)
+                .font(MeetOverlayTheme.Typography.helper.weight(.medium))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.trailing)
+        }
     }
 }
 

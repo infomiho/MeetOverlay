@@ -17,6 +17,7 @@ final class MeetingMonitorController {
     private var isEnabled = true
     private var hasCalendarAccess = false
     private var visibleEventID: String?
+    private var isPreviewVisible = false
     private var reminderState = MeetingReminderState()
 
     init(
@@ -64,6 +65,40 @@ final class MeetingMonitorController {
         checkNow()
     }
 
+    func previewReminder() {
+        guard visibleEventID == nil, !isPreviewVisible else { return }
+
+        let now = Date()
+        let sampleEvent = CalendarEventSnapshot(
+            id: "preview",
+            title: "Sample Meeting",
+            startDate: now.addingTimeInterval(60),
+            endDate: now.addingTimeInterval(30 * 60),
+            isAllDay: false,
+            participationStatus: .accepted,
+            url: nil,
+            notes: "https://meet.google.com/abc-defg-hij",
+            location: nil
+        )
+
+        guard let meeting = JoinableMeeting.from(sampleEvent) else { return }
+
+        isPreviewVisible = true
+        overlayPresenter.show(
+            meeting: meeting,
+            reminderSound: ReminderSoundCatalog.sound(for: preferencesStore.load().reminderSoundID),
+            onJoin: { [weak self] in self?.endPreview() },
+            onSnooze: { [weak self] _ in self?.endPreview() },
+            onDismiss: { [weak self] in self?.endPreview() }
+        )
+    }
+
+    private func endPreview() {
+        isPreviewVisible = false
+        overlayPresenter.hide()
+        checkNow()
+    }
+
     private func startTimer() {
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
@@ -75,6 +110,8 @@ final class MeetingMonitorController {
     }
 
     private func checkNow() {
+        guard !isPreviewVisible else { return }
+
         guard hasCalendarAccess else {
             statusMenu.update(
                 status: "Calendar access needed",

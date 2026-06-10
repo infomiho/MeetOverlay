@@ -25,6 +25,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             loginItemController: loginItemController,
             onPreferencesChanged: { [weak monitorController] in
                 monitorController?.refreshFromPreferences()
+            },
+            onPreviewReminder: { [weak monitorController] in
+                monitorController?.previewReminder()
             }
         )
 

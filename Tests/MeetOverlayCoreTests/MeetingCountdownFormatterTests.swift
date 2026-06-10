@@ -43,7 +43,7 @@ final class MeetingCountdownFormatterTests: XCTestCase {
 
         XCTAssertEqual(
             MeetingCountdownFormatter.text(now: now, startDate: now.addingTimeInterval(30)),
-            "Starts in 30 seconds"
+            "Starts in 30s"
         )
     }
 

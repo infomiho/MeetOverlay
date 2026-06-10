@@ -50,6 +50,8 @@ final class OverlayPresenter {
     }
 
     private func present<Content: View>(_ contentView: Content, onDismiss: @escaping () -> Void) {
+        let activeScreen = NSScreen.main ?? NSScreen.screens.first
+
         for screen in NSScreen.screens {
             let window = OverlayWindow(
                 contentRect: screen.frame,
@@ -64,9 +66,14 @@ final class OverlayPresenter {
             window.backgroundColor = .clear
             window.isOpaque = false
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: contentView)
 
-            window.makeKeyAndOrderFront(nil)
+            if screen == activeScreen {
+                window.contentView = NSHostingView(rootView: contentView)
+                window.makeKeyAndOrderFront(nil)
+            } else {
+                window.contentView = NSHostingView(rootView: SecondaryScreenScrimView())
+            }
+
             window.orderFrontRegardless()
             windows.append(window)
         }
@@ -74,6 +81,12 @@ final class OverlayPresenter {
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
+}
+
+private struct SecondaryScreenScrimView: View {
+    var body: some View {
+        MeetOverlayTheme.Palette.overlayScrim.ignoresSafeArea()
+    }
 }
 
 @MainActor
@@ -117,7 +130,11 @@ private struct MeetingOverlayView: View {
                     VStack(spacing: 12) {
                         Text(MeetingCountdownFormatter.text(now: context.date, startDate: meeting.startDate))
                             .font(MeetOverlayTheme.Typography.overlayStatus)
-                            .foregroundStyle(MeetOverlayTheme.Palette.accent)
+                            .foregroundStyle(
+                                context.date >= meeting.startDate
+                                    ? MeetOverlayTheme.Palette.attention
+                                    : MeetOverlayTheme.Palette.accent
+                            )
 
                         Text(meeting.title)
                             .font(MeetOverlayTheme.Typography.overlayTitle)
@@ -148,11 +165,11 @@ private struct MeetingOverlayView: View {
                     .buttonStyle(.plain)
                     .keyboardShortcut(.defaultAction)
 
-                    secondaryButton("Snooze 1m") {
+                    secondaryButton("Snooze 1m", key: "1") {
                         onSnooze(60)
                     }
 
-                    secondaryButton("Snooze 5m") {
+                    secondaryButton("Snooze 5m", key: "5") {
                         onSnooze(5 * 60)
                     }
 
@@ -168,7 +185,7 @@ private struct MeetingOverlayView: View {
                     MeetLinkRescueView(links: meeting.meetLinks)
                 }
 
-                Text(meeting.meetLinks.count > 1 ? "Return joins the first room. Esc dismisses this reminder." : "Return joins the room. Esc dismisses this reminder.")
+                Text(meeting.meetLinks.count > 1 ? "Return joins the first room. 1 or 5 snoozes. Esc dismisses." : "Return joins the room. 1 or 5 snoozes. Esc dismisses.")
                     .font(MeetOverlayTheme.Typography.overlayHint)
                     .foregroundStyle(MeetOverlayTheme.Palette.overlayTertiaryText)
             }
@@ -194,11 +211,12 @@ private struct MeetingOverlayView: View {
         "\(meeting.startDate.formatted(date: .omitted, time: .shortened)) to \(meeting.endDate.formatted(date: .omitted, time: .shortened))"
     }
 
-    private func secondaryButton(_ title: String, action: @escaping () -> Void) -> some View {
+    private func secondaryButton(_ title: String, key: KeyEquivalent, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             secondaryButtonLabel(title)
         }
         .buttonStyle(.plain)
+        .keyboardShortcut(key, modifiers: [])
     }
 
     private func secondaryButtonLabel(_ title: String) -> some View {
