@@ -157,6 +157,23 @@ public extension CalendarEventSnapshot {
     }
 }
 
+public enum CalendarEventOccurrenceID {
+    public static func make(
+        eventIdentifier: String?,
+        calendarItemIdentifier: String,
+        startDate: Date
+    ) -> String {
+        let base: String
+        if let eventIdentifier, !eventIdentifier.isEmpty {
+            base = eventIdentifier
+        } else {
+            base = calendarItemIdentifier
+        }
+
+        return "\(base)|\(startDate.timeIntervalSinceReferenceDate)"
+    }
+}
+
 public enum CalendarEventFilter {
     public static func events(
         _ events: [CalendarEventSnapshot],
@@ -428,14 +445,16 @@ public struct MeetingAlertLadder {
     public func alert(
         now: Date,
         events: [CalendarEventSnapshot],
-        hiddenEventIDs: Set<String>
+        hiddenEventIDs: Set<String>,
+        lateAlertExemptEventIDs: Set<String> = []
     ) -> MeetingAlert? {
         events
             .sorted { $0.startDate < $1.startDate }
             .compactMap { event -> MeetingAlert? in
                 guard event.endDate > now else { return nil }
                 guard event.startDate <= now.addingTimeInterval(gentleLeadTime) else { return nil }
-                guard event.startDate >= now.addingTimeInterval(-lateAlertGraceTime) else { return nil }
+                guard event.startDate >= now.addingTimeInterval(-lateAlertGraceTime)
+                    || lateAlertExemptEventIDs.contains(event.id) else { return nil }
                 guard !hiddenEventIDs.contains(event.id) else { return nil }
                 guard let meeting = JoinableMeeting.from(event) else { return nil }
 
@@ -468,6 +487,7 @@ public extension JoinableMeeting {
 public struct MeetingReminderState: Equatable {
     private var handledEventIDs = Set<String>()
     private var snoozedUntilByEventID: [String: Date] = [:]
+    private var expiredSnoozeIDs = Set<String>()
     private var deliveredStagesByEventID: [String: Set<MeetingAlertStage>] = [:]
     private var dismissedAirlockIDs = Set<String>()
 
@@ -483,11 +503,19 @@ public struct MeetingReminderState: Equatable {
 
     public mutating func snooze(eventID: String, until date: Date) {
         snoozedUntilByEventID[eventID] = date
+        expiredSnoozeIDs.remove(eventID)
+        deliveredStagesByEventID[eventID] = nil
     }
 
     public mutating func hiddenEventIDs(now: Date) -> Set<String> {
+        let expired = snoozedUntilByEventID.filter { $0.value <= now }.keys
+        expiredSnoozeIDs.formUnion(expired)
         snoozedUntilByEventID = snoozedUntilByEventID.filter { $0.value > now }
         return handledEventIDs.union(snoozedUntilByEventID.keys)
+    }
+
+    public var expiredSnoozeEventIDs: Set<String> {
+        expiredSnoozeIDs
     }
 
     public func shouldDeliver(eventID: String, stage: MeetingAlertStage) -> Bool {
@@ -509,34 +537,7 @@ public struct MeetingReminderState: Equatable {
     private mutating func suppress(eventID: String) {
         handledEventIDs.insert(eventID)
         snoozedUntilByEventID[eventID] = nil
-    }
-}
-
-public struct MeetingAlertSelector {
-    private let alertLeadTime: TimeInterval
-    private let lateAlertGraceTime: TimeInterval
-
-    public init(alertLeadTime: TimeInterval, lateAlertGraceTime: TimeInterval = 120) {
-        self.alertLeadTime = alertLeadTime
-        self.lateAlertGraceTime = lateAlertGraceTime
-    }
-
-    public func meetingToShow(
-        now: Date,
-        events: [CalendarEventSnapshot],
-        hiddenEventIDs: Set<String>
-    ) -> JoinableMeeting? {
-        events
-            .sorted { $0.startDate < $1.startDate }
-            .compactMap { event -> JoinableMeeting? in
-                guard event.endDate > now else { return nil }
-                guard event.startDate <= now.addingTimeInterval(alertLeadTime) else { return nil }
-                guard event.startDate >= now.addingTimeInterval(-lateAlertGraceTime) else { return nil }
-                guard !hiddenEventIDs.contains(event.id) else { return nil }
-
-                return JoinableMeeting.from(event)
-            }
-            .first
+        expiredSnoozeIDs.remove(eventID)
     }
 }
 

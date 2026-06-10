@@ -35,6 +35,10 @@ final class MeetingMonitorController {
             guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") else { return }
             NSWorkspace.shared.open(url)
         }
+
+        calendarEventSource.onEventStoreChanged = { [weak self] in
+            self?.checkNow()
+        }
     }
 
     func start() {
@@ -67,6 +71,7 @@ final class MeetingMonitorController {
                 self?.checkNow()
             }
         }
+        timer?.tolerance = 3
     }
 
     private func checkNow() {
@@ -143,7 +148,12 @@ final class MeetingMonitorController {
             return
         }
 
-        let alert = alertLadder.alert(now: now, events: events, hiddenEventIDs: hiddenEventIDs)
+        let alert = alertLadder.alert(
+            now: now,
+            events: events,
+            hiddenEventIDs: hiddenEventIDs,
+            lateAlertExemptEventIDs: reminderState.expiredSnoozeEventIDs
+        )
 
         guard let alert else {
             visibleEventID = nil

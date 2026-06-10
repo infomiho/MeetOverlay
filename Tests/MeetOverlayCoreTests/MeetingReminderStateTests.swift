@@ -42,6 +42,45 @@ final class MeetingReminderStateTests: XCTestCase {
         XCTAssertEqual(state.hiddenEventIDs(now: now.addingTimeInterval(60)), ["planning"])
     }
 
+    func testSnoozeAllowsDeliveringTheSameStageAgain() throws {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+        var state = MeetingReminderState()
+
+        state.recordDelivery(eventID: "planning", stage: .fullscreen)
+        state.snooze(eventID: "planning", until: now.addingTimeInterval(60))
+
+        XCTAssertTrue(state.shouldDeliver(eventID: "planning", stage: .fullscreen))
+    }
+
+    func testExpiredSnoozeIsTrackedUntilEventIsHandled() throws {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+        var state = MeetingReminderState()
+
+        state.snooze(eventID: "planning", until: now.addingTimeInterval(60))
+
+        _ = state.hiddenEventIDs(now: now)
+        XCTAssertEqual(state.expiredSnoozeEventIDs, [])
+
+        _ = state.hiddenEventIDs(now: now.addingTimeInterval(60))
+        XCTAssertEqual(state.expiredSnoozeEventIDs, ["planning"])
+
+        state.dismiss(eventID: "planning")
+        XCTAssertEqual(state.expiredSnoozeEventIDs, [])
+    }
+
+    func testSnoozingAgainClearsExpiredSnoozeTracking() throws {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+        var state = MeetingReminderState()
+
+        state.snooze(eventID: "planning", until: now.addingTimeInterval(60))
+        _ = state.hiddenEventIDs(now: now.addingTimeInterval(60))
+
+        state.snooze(eventID: "planning", until: now.addingTimeInterval(120))
+
+        XCTAssertEqual(state.expiredSnoozeEventIDs, [])
+        XCTAssertEqual(state.hiddenEventIDs(now: now.addingTimeInterval(90)), ["planning"])
+    }
+
     func testDoesNotDeliverSameAlertStageTwice() throws {
         var state = MeetingReminderState()
 

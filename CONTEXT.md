@@ -12,6 +12,10 @@ _Avoid_: meeting candidate, actionable event, valid meeting
 A `meet.google.com` room URL found in an event's url, notes, location, or title. Derived once via `CalendarEventSnapshot.meetLinks`; duplicates across fields collapse to one room.
 _Avoid_: conference URL, video link, room URL
 
+**Occurrence Identity**:
+The identity of one occurrence of a calendar event, built by `CalendarEventOccurrenceID.make(...)`. EventKit shares `eventIdentifier` across every occurrence of a recurring event, so reminder state (delivered stages, dismiss, snooze) keys on identifier plus occurrence start date. Dismissing today's standup must not silence tomorrow's.
+_Avoid_: event ID (ambiguous about series vs occurrence)
+
 **Alert Ladder**:
 The escalation from a gentle passive notification to the fullscreen reminder as a Joinable Meeting approaches, owned by `MeetingAlertLadder`.
 _Avoid_: alert chain, notification pipeline

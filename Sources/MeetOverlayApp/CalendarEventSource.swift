@@ -4,7 +4,21 @@ import MeetOverlayCore
 
 @MainActor
 final class CalendarEventSource {
+    var onEventStoreChanged: (() -> Void)?
+
     private let eventStore = EKEventStore()
+
+    init() {
+        NotificationCenter.default.addObserver(
+            forName: .EKEventStoreChanged,
+            object: eventStore,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.onEventStoreChanged?()
+            }
+        }
+    }
 
     var calendarAccessStatus: CalendarAccessDiagnosticState {
         switch EKEventStore.authorizationStatus(for: .event) {
@@ -73,11 +87,11 @@ final class CalendarEventSource {
     }
 
     private func stableID(for event: EKEvent) -> String {
-        if let eventIdentifier = event.eventIdentifier, !eventIdentifier.isEmpty {
-            return eventIdentifier
-        }
-
-        return "\(event.calendarItemIdentifier)|\(event.startDate.timeIntervalSinceReferenceDate)"
+        CalendarEventOccurrenceID.make(
+            eventIdentifier: event.eventIdentifier,
+            calendarItemIdentifier: event.calendarItemIdentifier,
+            startDate: event.startDate
+        )
     }
 
     private func participationStatus(for event: EKEvent) -> EventParticipationStatus {

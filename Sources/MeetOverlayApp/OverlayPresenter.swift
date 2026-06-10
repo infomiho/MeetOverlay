@@ -191,10 +191,7 @@ private struct MeetingOverlayView: View {
     }
 
     private var timeRangeText: String {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        formatter.dateStyle = .none
-        return "\(formatter.string(from: meeting.startDate)) to \(formatter.string(from: meeting.endDate))"
+        "\(meeting.startDate.formatted(date: .omitted, time: .shortened)) to \(meeting.endDate.formatted(date: .omitted, time: .shortened))"
     }
 
     private func secondaryButton(_ title: String, action: @escaping () -> Void) -> some View {
@@ -304,10 +301,7 @@ private struct BackToBackAirlockView: View {
     }
 
     private var timeRangeText: String {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        formatter.dateStyle = .none
-        return "\(formatter.string(from: nextMeeting.startDate)) to \(formatter.string(from: nextMeeting.endDate))"
+        "\(nextMeeting.startDate.formatted(date: .omitted, time: .shortened)) to \(nextMeeting.endDate.formatted(date: .omitted, time: .shortened))"
     }
 
     private func secondaryButtonLabel(_ title: String) -> some View {
