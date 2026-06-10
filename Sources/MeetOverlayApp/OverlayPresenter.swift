@@ -111,7 +111,7 @@ private final class OverlayWindow: NSWindow {
 }
 
 private struct OverlayPrimaryButtonStyle: ButtonStyle {
-    var minWidth: CGFloat = 172
+    var minWidth: CGFloat = 150
 
     func makeBody(configuration: Configuration) -> some View {
         StyledLabel(configuration: configuration, minWidth: minWidth)
@@ -126,9 +126,11 @@ private struct OverlayPrimaryButtonStyle: ButtonStyle {
 
         var body: some View {
             configuration.label
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .font(MeetOverlayTheme.Typography.overlayButton.weight(.bold))
                 .foregroundStyle(.black)
-                .padding(.horizontal, 38)
+                .padding(.horizontal, 26)
                 .padding(.vertical, 17)
                 .frame(minWidth: minWidth)
                 .background(
@@ -168,15 +170,17 @@ private struct OverlaySecondaryButtonStyle: ButtonStyle {
 
         var body: some View {
             configuration.label
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .font(compact ? MeetOverlayTheme.Typography.overlayCompactButton : MeetOverlayTheme.Typography.overlaySecondaryButton)
                 .foregroundStyle(
                     isHovered
                         ? MeetOverlayTheme.Palette.overlayText
                         : MeetOverlayTheme.Palette.overlaySecondaryText
                 )
-                .padding(.horizontal, compact ? 14 : 20)
+                .padding(.horizontal, compact ? 14 : 16)
                 .padding(.vertical, compact ? 7 : 14)
-                .frame(minWidth: compact ? 0 : 112)
+                .frame(minWidth: compact ? 0 : 96)
                 .background(Capsule().fill(fill))
                 .overlay(
                     Capsule()
@@ -322,7 +326,7 @@ private struct MeetingOverlayView: View {
                     }
                 }
 
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     Button(action: onJoin) {
                         HStack(spacing: 10) {
                             Text(meeting.meetLinks.count > 1 ? "Join First Room" : "Join Room")
@@ -355,7 +359,7 @@ private struct MeetingOverlayView: View {
                     MeetLinkRescueView(links: meeting.meetLinks)
                 }
             }
-            .overlayPanel(maxWidth: 840)
+            .overlayPanel(maxWidth: 880)
         }
         .tint(MeetOverlayTheme.Palette.accent)
         .onExitCommand(perform: onDismiss)
