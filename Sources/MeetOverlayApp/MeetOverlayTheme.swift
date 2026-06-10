@@ -10,6 +10,7 @@ enum MeetOverlayTheme {
                 ? accentColor
                 : NSColor(red: 0.62, green: 0.47, blue: 0, alpha: 1)
         }
+        static let menuDetailColor = NSColor.secondaryLabelColor
         static let settingsBackground = Color(nsColor: .windowBackgroundColor)
         static let cardBackground = Color(nsColor: .controlBackgroundColor)
         static let insetBackground = Color(nsColor: .textBackgroundColor).opacity(0.42)
@@ -18,6 +19,7 @@ enum MeetOverlayTheme {
         static let mutedBorder = Color(nsColor: .separatorColor).opacity(0.24)
         static let warning = Color(nsColor: .systemRed)
         static let attention = Color(nsColor: .systemOrange)
+        static let healthy = Color(nsColor: .systemGreen)
 
         static let overlayScrim = Color.black.opacity(0.45)
         static let overlayStart = Color.black.opacity(0.93)
@@ -27,6 +29,15 @@ enum MeetOverlayTheme {
         static let overlayText = Color.white
         static let overlaySecondaryText = Color.white.opacity(0.72)
         static let overlayTertiaryText = Color.white.opacity(0.52)
+        static let overlayPrimaryHoverHighlight = Color.white.opacity(0.16)
+        static let overlayPrimaryPressedShade = Color.black.opacity(0.1)
+        static let overlaySecondaryHoverFill = Color.white.opacity(0.13)
+        static let overlaySecondaryPressedFill = Color.white.opacity(0.05)
+        static let overlaySecondaryHoverBorder = Color.white.opacity(0.24)
+        static let overlayKeycapFill = Color.white.opacity(0.09)
+        static let overlayKeycapBorder = Color.white.opacity(0.16)
+        static let overlayKeycapOnAccentFill = Color.black.opacity(0.1)
+        static let overlayKeycapOnAccentText = Color.black.opacity(0.62)
     }
 
     enum Spacing {
@@ -51,17 +62,35 @@ enum MeetOverlayTheme {
 
     enum Size {
         static let settingsIconBadge: CGFloat = 22
+        static let settingsStatusIcon: CGFloat = 14
     }
 
     enum Typography {
         static let pageTitle = Font.title2.weight(.semibold)
         static let sectionTitle = Font.headline
         static let helper = Font.footnote
+        @MainActor static let menuBarTitleFont = NSFont.monospacedDigitSystemFont(
+            ofSize: NSFont.menuBarFont(ofSize: 0).pointSize,
+            weight: .regular
+        )
+        @MainActor static let menuRowTitleFont = NSFont.menuFont(ofSize: 0)
+        @MainActor static let menuRowEmphasisFont = NSFont.systemFont(ofSize: menuRowTitleFont.pointSize, weight: .semibold)
+        @MainActor static let menuRowDigitFont = NSFont.monospacedDigitSystemFont(ofSize: menuRowTitleFont.pointSize, weight: .regular)
         static let overlayStatus = Font.system(size: 28, weight: .semibold)
         static let overlayTitle = Font.system(size: 54, weight: .bold)
         static let overlayMetadata = Font.system(size: 19, weight: .medium)
         static let overlayButton = Font.system(size: 20, weight: .semibold)
         static let overlaySecondaryButton = Font.system(size: 18, weight: .semibold)
         static let overlayHint = Font.system(size: 15, weight: .medium)
+        static let overlayCompactButton = overlayHint.weight(.semibold)
+        static let overlayKeycap = Font.system(size: 12, weight: .semibold)
+    }
+
+    enum Motion {
+        static let hoverDuration: TimeInterval = 0.12
+        static let pressDuration: TimeInterval = 0.08
+        static let pressedScale: CGFloat = 0.98
+        static let overlayEntranceDuration: TimeInterval = 0.18
+        static let overlayEntranceScale: CGFloat = 0.97
     }
 }

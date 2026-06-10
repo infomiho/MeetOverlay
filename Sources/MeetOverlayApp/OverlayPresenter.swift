@@ -110,22 +110,6 @@ private final class OverlayWindow: NSWindow {
     }
 }
 
-private enum OverlayStyle {
-    static let primaryHoverHighlight = Color.white.opacity(0.16)
-    static let primaryPressedShade = Color.black.opacity(0.1)
-    static let secondaryHoverFill = Color.white.opacity(0.13)
-    static let secondaryPressedFill = Color.white.opacity(0.05)
-    static let secondaryHoverBorder = Color.white.opacity(0.24)
-    static let keycapFill = Color.white.opacity(0.09)
-    static let keycapBorder = Color.white.opacity(0.16)
-    static let keycapOnAccentFill = Color.black.opacity(0.1)
-    static let keycapOnAccentText = Color.black.opacity(0.62)
-    static let keycapFont = Font.system(size: 12, weight: .semibold)
-    static let compactButtonFont = MeetOverlayTheme.Typography.overlayHint.weight(.semibold)
-    static let panelEntranceScale: CGFloat = 0.97
-    static let panelEntranceDuration: TimeInterval = 0.18
-}
-
 private struct OverlayPrimaryButtonStyle: ButtonStyle {
     var minWidth: CGFloat = 172
 
@@ -152,18 +136,18 @@ private struct OverlayPrimaryButtonStyle: ButtonStyle {
                         .fill(MeetOverlayTheme.Palette.accent)
                         .overlay(Capsule().fill(highlight))
                 )
-                .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
-                .animation(.easeOut(duration: 0.12), value: isHovered)
-                .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
+                .scaleEffect(configuration.isPressed && !reduceMotion ? MeetOverlayTheme.Motion.pressedScale : 1)
+                .animation(.easeOut(duration: MeetOverlayTheme.Motion.hoverDuration), value: isHovered)
+                .animation(.easeOut(duration: MeetOverlayTheme.Motion.pressDuration), value: configuration.isPressed)
                 .onHover { isHovered = $0 }
         }
 
         private var highlight: Color {
             if configuration.isPressed {
-                return OverlayStyle.primaryPressedShade
+                return MeetOverlayTheme.Palette.overlayPrimaryPressedShade
             }
 
-            return isHovered ? OverlayStyle.primaryHoverHighlight : .clear
+            return isHovered ? MeetOverlayTheme.Palette.overlayPrimaryHoverHighlight : .clear
         }
     }
 }
@@ -184,7 +168,7 @@ private struct OverlaySecondaryButtonStyle: ButtonStyle {
 
         var body: some View {
             configuration.label
-                .font(compact ? OverlayStyle.compactButtonFont : MeetOverlayTheme.Typography.overlaySecondaryButton)
+                .font(compact ? MeetOverlayTheme.Typography.overlayCompactButton : MeetOverlayTheme.Typography.overlaySecondaryButton)
                 .foregroundStyle(
                     isHovered
                         ? MeetOverlayTheme.Palette.overlayText
@@ -197,22 +181,22 @@ private struct OverlaySecondaryButtonStyle: ButtonStyle {
                 .overlay(
                     Capsule()
                         .stroke(
-                            isHovered ? OverlayStyle.secondaryHoverBorder : MeetOverlayTheme.Palette.overlayPanelBorder,
+                            isHovered ? MeetOverlayTheme.Palette.overlaySecondaryHoverBorder : MeetOverlayTheme.Palette.overlayPanelBorder,
                             lineWidth: 1
                         )
                 )
-                .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
-                .animation(.easeOut(duration: 0.12), value: isHovered)
-                .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
+                .scaleEffect(configuration.isPressed && !reduceMotion ? MeetOverlayTheme.Motion.pressedScale : 1)
+                .animation(.easeOut(duration: MeetOverlayTheme.Motion.hoverDuration), value: isHovered)
+                .animation(.easeOut(duration: MeetOverlayTheme.Motion.pressDuration), value: configuration.isPressed)
                 .onHover { isHovered = $0 }
         }
 
         private var fill: Color {
             if configuration.isPressed {
-                return OverlayStyle.secondaryPressedFill
+                return MeetOverlayTheme.Palette.overlaySecondaryPressedFill
             }
 
-            return isHovered ? OverlayStyle.secondaryHoverFill : MeetOverlayTheme.Palette.overlayPanel
+            return isHovered ? MeetOverlayTheme.Palette.overlaySecondaryHoverFill : MeetOverlayTheme.Palette.overlayPanel
         }
     }
 }
@@ -228,21 +212,21 @@ private struct KeycapHint: View {
 
     var body: some View {
         Text(symbol)
-            .font(OverlayStyle.keycapFont)
+            .font(MeetOverlayTheme.Typography.overlayKeycap)
             .foregroundStyle(
                 tone == .onAccent
-                    ? OverlayStyle.keycapOnAccentText
+                    ? MeetOverlayTheme.Palette.overlayKeycapOnAccentText
                     : MeetOverlayTheme.Palette.overlayTertiaryText
             )
             .padding(.horizontal, 5)
             .frame(minWidth: 20, minHeight: 20)
             .background(
                 RoundedRectangle(cornerRadius: 5)
-                    .fill(tone == .onAccent ? OverlayStyle.keycapOnAccentFill : OverlayStyle.keycapFill)
+                    .fill(tone == .onAccent ? MeetOverlayTheme.Palette.overlayKeycapOnAccentFill : MeetOverlayTheme.Palette.overlayKeycapFill)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 5)
-                    .stroke(tone == .onAccent ? Color.clear : OverlayStyle.keycapBorder, lineWidth: 1)
+                    .stroke(tone == .onAccent ? Color.clear : MeetOverlayTheme.Palette.overlayKeycapBorder, lineWidth: 1)
             )
             .accessibilityHidden(true)
     }
@@ -281,9 +265,9 @@ private struct OverlayPanelModifier: ViewModifier {
             .shadow(color: .black.opacity(0.28), radius: 30, y: 18)
             .padding(48)
             .opacity(hasEntered ? 1 : 0)
-            .scaleEffect(hasEntered || reduceMotion ? 1 : OverlayStyle.panelEntranceScale)
+            .scaleEffect(hasEntered || reduceMotion ? 1 : MeetOverlayTheme.Motion.overlayEntranceScale)
             .onAppear {
-                withAnimation(.easeOut(duration: OverlayStyle.panelEntranceDuration)) {
+                withAnimation(.easeOut(duration: MeetOverlayTheme.Motion.overlayEntranceDuration)) {
                     hasEntered = true
                 }
             }

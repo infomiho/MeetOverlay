@@ -11,6 +11,8 @@ final class StatusMenuController: NSObject {
     private let preferencesItem = NSMenuItem(title: "Settings...", action: #selector(openPreferences), keyEquivalent: ",")
     private let calendarSettingsItem = NSMenuItem(title: "Open Calendar Privacy Settings...", action: #selector(openCalendarSettings), keyEquivalent: "")
 
+    private static let timeColumnGap: CGFloat = 10
+
     private var sections: [CalendarMenuSection] = []
     private var emptyMessage = "No events today or tomorrow"
     private var showsCalendarSettingsAction = false
@@ -19,7 +21,7 @@ final class StatusMenuController: NSObject {
         super.init()
 
         menu.autoenablesItems = false
-        statusItem.button?.font = MenuStyle.menuBarTitleFont
+        statusItem.button?.font = MeetOverlayTheme.Typography.menuBarTitleFont
         statusItem.button?.title = "Meet"
         statusItem.button?.setAccessibilityLabel("MeetOverlay")
         statusItem.button?.setAccessibilityHelp("Opens upcoming calendar events and meeting reminder settings.")
@@ -120,14 +122,14 @@ final class StatusMenuController: NSObject {
     }
 
     private func attributedTitle(for row: CalendarMenuRow, timeColumnWidth: CGFloat) -> NSAttributedString {
-        let titleFont = row.phase == .inProgress ? MenuStyle.inProgressTitleFont : MenuStyle.rowTitleFont
-        let titleColor: NSColor? = row.phase == .ended ? MenuStyle.rowDetailColor : nil
-        let statusColor = row.phase == .inProgress ? MenuStyle.rowUrgentColor : MenuStyle.rowDetailColor
+        let titleFont = row.phase == .inProgress ? MeetOverlayTheme.Typography.menuRowEmphasisFont : MeetOverlayTheme.Typography.menuRowTitleFont
+        let titleColor: NSColor? = row.phase == .ended ? MeetOverlayTheme.Palette.menuDetailColor : nil
+        let statusColor = row.phase == .inProgress ? MeetOverlayTheme.Palette.menuBarUrgentColor : MeetOverlayTheme.Palette.menuDetailColor
 
         let title = NSMutableAttributedString()
         title.append(NSAttributedString(
             string: "\(row.timeText)\t",
-            attributes: attributes(font: MenuStyle.rowDigitFont, color: MenuStyle.rowDetailColor)
+            attributes: attributes(font: MeetOverlayTheme.Typography.menuRowDigitFont, color: MeetOverlayTheme.Palette.menuDetailColor)
         ))
         title.append(NSAttributedString(
             string: row.title,
@@ -137,19 +139,19 @@ final class StatusMenuController: NSObject {
         if let statusText = row.statusText {
             title.append(NSAttributedString(
                 string: "  \(statusText)",
-                attributes: attributes(font: MenuStyle.rowDigitFont, color: statusColor)
+                attributes: attributes(font: MeetOverlayTheme.Typography.menuRowDigitFont, color: statusColor)
             ))
         }
 
         if row.meetLinks.count > 1 {
             title.append(NSAttributedString(
                 string: "  \(row.meetLinks.count) Meet links",
-                attributes: attributes(font: MenuStyle.rowDigitFont, color: MenuStyle.rowDetailColor)
+                attributes: attributes(font: MeetOverlayTheme.Typography.menuRowDigitFont, color: MeetOverlayTheme.Palette.menuDetailColor)
             ))
         }
 
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.tabStops = [NSTextTab(textAlignment: .left, location: timeColumnWidth + MenuStyle.timeColumnGap)]
+        paragraphStyle.tabStops = [NSTextTab(textAlignment: .left, location: timeColumnWidth + Self.timeColumnGap)]
         title.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: title.length))
 
         return title
@@ -167,24 +169,28 @@ final class StatusMenuController: NSObject {
 
     private func timeColumnWidth() -> CGFloat {
         let widths = sections.flatMap(\.rows).map { row in
-            (row.timeText as NSString).size(withAttributes: [.font: MenuStyle.rowDigitFont]).width
+            (row.timeText as NSString).size(withAttributes: [.font: MeetOverlayTheme.Typography.menuRowDigitFont]).width
         }
 
         return (widths.max() ?? 0).rounded(.up)
     }
 
     private func nextMeetingSummary() -> String? {
-        guard let section = sections.first, let row = section.rows.first else {
-            return nil
+        for section in sections {
+            guard let row = section.rows.first(where: { $0.phase != .ended }) else {
+                continue
+            }
+
+            var summary = "\(section.title): \(row.title), \(row.timeText)"
+
+            if let statusText = row.statusText {
+                summary += " (\(statusText))"
+            }
+
+            return summary
         }
 
-        var summary = "\(section.title): \(row.title), \(row.timeText)"
-
-        if let statusText = row.statusText {
-            summary += " (\(statusText))"
-        }
-
-        return summary
+        return nil
     }
 
     @objc private func openPreferences() {
@@ -204,19 +210,5 @@ final class StatusMenuController: NSObject {
         guard let url = sender.representedObject as? URL else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url.absoluteString, forType: .string)
-    }
-
-    @MainActor
-    private enum MenuStyle {
-        static let menuBarTitleFont = NSFont.monospacedDigitSystemFont(
-            ofSize: NSFont.menuBarFont(ofSize: 0).pointSize,
-            weight: .regular
-        )
-        static let rowTitleFont = NSFont.menuFont(ofSize: 0)
-        static let inProgressTitleFont = NSFont.systemFont(ofSize: rowTitleFont.pointSize, weight: .semibold)
-        static let rowDigitFont = NSFont.monospacedDigitSystemFont(ofSize: rowTitleFont.pointSize, weight: .regular)
-        static let rowDetailColor = NSColor.secondaryLabelColor
-        static let rowUrgentColor = MeetOverlayTheme.Palette.menuBarUrgentColor
-        static let timeColumnGap: CGFloat = 10
     }
 }

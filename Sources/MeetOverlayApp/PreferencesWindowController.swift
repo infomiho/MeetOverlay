@@ -523,17 +523,14 @@ private struct SyncDoctorView: View {
 }
 
 private struct SyncDoctorRow: View {
-    private static let healthyColor = Color(nsColor: .systemGreen)
-    private static let statusIconWidth: CGFloat = 14
-
     let item: CalendarSyncDiagnosticItem
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: MeetOverlayTheme.Spacing.small) {
             Image(systemName: item.isHealthy ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                 .font(MeetOverlayTheme.Typography.helper.weight(.semibold))
-                .foregroundStyle(item.isHealthy ? Self.healthyColor : MeetOverlayTheme.Palette.attention)
-                .frame(width: Self.statusIconWidth)
+                .foregroundStyle(item.isHealthy ? MeetOverlayTheme.Palette.healthy : MeetOverlayTheme.Palette.attention)
+                .frame(width: MeetOverlayTheme.Size.settingsStatusIcon)
                 .accessibilityLabel(item.isHealthy ? "OK" : "Needs attention")
 
             Text(item.title)

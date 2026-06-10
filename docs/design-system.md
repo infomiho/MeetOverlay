@@ -21,6 +21,7 @@ MeetOverlay uses a native macOS utility style: quiet settings, clear calendar hi
 - Typography: system hierarchy for Settings, large system type for overlay.
 - Spacing: shared small, medium, large, card, page, and overlay spacing.
 - Radius: icon badge, inset, card, and overlay panel radii.
+- Motion: hover and press response timing, pressed scale, and the overlay panel entrance.
 
 ## Usage
 
