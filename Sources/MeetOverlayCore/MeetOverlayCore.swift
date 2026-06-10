@@ -237,6 +237,7 @@ public enum CalendarAccessDiagnosticState: Equatable {
 public struct CalendarSyncDiagnosticItem: Equatable {
     public let title: String
     public let value: String
+    public let isHealthy: Bool
 }
 
 public struct CalendarSyncDiagnosticProblem: Equatable {
@@ -258,13 +259,44 @@ public struct CalendarSyncDiagnostic: Equatable {
         now: Date,
         events: [CalendarEventSnapshot]
     ) -> CalendarSyncDiagnostic {
-        CalendarSyncDiagnostic(
-            calendarAccess: CalendarSyncDiagnosticItem(title: "Calendar Access", value: calendarAccessText(calendarAccess)),
-            includedCalendars: CalendarSyncDiagnosticItem(title: "Included Calendars", value: includedCalendarsText(calendars: calendars, selectedCalendarIDs: selectedCalendarIDs)),
-            launchAtLogin: CalendarSyncDiagnosticItem(title: "Open at Login", value: launchAtLoginStatus),
-            nextMeet: CalendarSyncDiagnosticItem(title: "Next Google Meet", value: nextMeetText(now: now, events: events, selectedCalendarIDs: selectedCalendarIDs)),
-            problem: problem(calendarAccess: calendarAccess, calendars: calendars, selectedCalendarIDs: selectedCalendarIDs)
+        let problem = problem(calendarAccess: calendarAccess, calendars: calendars, selectedCalendarIDs: selectedCalendarIDs)
+        return CalendarSyncDiagnostic(
+            calendarAccess: CalendarSyncDiagnosticItem(
+                title: "Calendar Access",
+                value: calendarAccessText(calendarAccess),
+                isHealthy: calendarAccess == .allowed
+            ),
+            includedCalendars: CalendarSyncDiagnosticItem(
+                title: "Included Calendars",
+                value: includedCalendarsText(calendars: calendars, selectedCalendarIDs: selectedCalendarIDs),
+                isHealthy: hasIncludedCalendars(calendars: calendars, selectedCalendarIDs: selectedCalendarIDs)
+            ),
+            launchAtLogin: CalendarSyncDiagnosticItem(
+                title: "Open at Login",
+                value: launchAtLoginStatus,
+                isHealthy: settledLaunchAtLoginStatuses.contains(launchAtLoginStatus)
+            ),
+            nextMeet: CalendarSyncDiagnosticItem(
+                title: "Next Google Meet",
+                value: nextMeetText(now: now, events: events, selectedCalendarIDs: selectedCalendarIDs),
+                isHealthy: problem == nil
+            ),
+            problem: problem
         )
+    }
+
+    private static let settledLaunchAtLoginStatuses: Set<String> = ["Enabled", "Disabled"]
+
+    private static func hasIncludedCalendars(calendars: [CalendarSnapshot], selectedCalendarIDs: Set<String>?) -> Bool {
+        guard !calendars.isEmpty else {
+            return false
+        }
+
+        guard let selectedCalendarIDs else {
+            return true
+        }
+
+        return !selectedCalendarIDs.intersection(Set(calendars.map(\.id))).isEmpty
     }
 
     private static func calendarAccessText(_ state: CalendarAccessDiagnosticState) -> String {

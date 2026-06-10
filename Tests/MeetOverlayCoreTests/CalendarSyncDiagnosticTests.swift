@@ -30,6 +30,10 @@ final class CalendarSyncDiagnosticTests: XCTestCase {
         XCTAssertEqual(diagnostic.includedCalendars.value, "All 1 calendars")
         XCTAssertEqual(diagnostic.launchAtLogin.value, "Enabled")
         XCTAssertEqual(diagnostic.nextMeet.value, "Planning")
+        XCTAssertTrue(diagnostic.calendarAccess.isHealthy)
+        XCTAssertTrue(diagnostic.includedCalendars.isHealthy)
+        XCTAssertTrue(diagnostic.launchAtLogin.isHealthy)
+        XCTAssertTrue(diagnostic.nextMeet.isHealthy)
         XCTAssertNil(diagnostic.problem)
     }
 
@@ -43,6 +47,22 @@ final class CalendarSyncDiagnosticTests: XCTestCase {
             events: []
         )
 
+        XCTAssertTrue(diagnostic.launchAtLogin.isHealthy)
+        XCTAssertTrue(diagnostic.nextMeet.isHealthy)
+        XCTAssertNil(diagnostic.problem)
+    }
+
+    func testFlagsLaunchAtLoginStatusThatNeedsAttention() throws {
+        let diagnostic = CalendarSyncDiagnostic.summary(
+            calendarAccess: .allowed,
+            calendars: [CalendarSnapshot(id: "work", title: "Work")],
+            selectedCalendarIDs: nil,
+            launchAtLoginStatus: "Requires approval in System Settings",
+            now: Date(timeIntervalSinceReferenceDate: 1_000),
+            events: []
+        )
+
+        XCTAssertFalse(diagnostic.launchAtLogin.isHealthy)
         XCTAssertNil(diagnostic.problem)
     }
 
@@ -59,6 +79,9 @@ final class CalendarSyncDiagnosticTests: XCTestCase {
 
         XCTAssertEqual(diagnostic.includedCalendars.value, "No calendars selected")
         XCTAssertEqual(diagnostic.nextMeet.value, "No upcoming Google Meet events")
+        XCTAssertTrue(diagnostic.calendarAccess.isHealthy)
+        XCTAssertFalse(diagnostic.includedCalendars.isHealthy)
+        XCTAssertFalse(diagnostic.nextMeet.isHealthy)
         XCTAssertEqual(diagnostic.problem?.message, "No calendars are selected. Choose at least one calendar so MeetOverlay can catch meetings.")
     }
 
@@ -121,6 +144,9 @@ final class CalendarSyncDiagnosticTests: XCTestCase {
         XCTAssertEqual(diagnostic.calendarAccess.value, "Denied")
         XCTAssertEqual(diagnostic.includedCalendars.value, "No calendars available")
         XCTAssertEqual(diagnostic.nextMeet.value, "No upcoming Google Meet events")
+        XCTAssertFalse(diagnostic.calendarAccess.isHealthy)
+        XCTAssertFalse(diagnostic.includedCalendars.isHealthy)
+        XCTAssertFalse(diagnostic.nextMeet.isHealthy)
         XCTAssertEqual(diagnostic.problem?.message, "Calendar access is denied. Allow access in System Settings so MeetOverlay can read events.")
     }
 

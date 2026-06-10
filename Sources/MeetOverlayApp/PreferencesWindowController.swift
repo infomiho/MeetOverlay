@@ -56,10 +56,12 @@ final class PreferencesWindowController {
                 defer: false
             )
 
-            window.title = "Settings"
+            window.title = "MeetOverlay Settings"
             window.minSize = NSSize(width: 560, height: 520)
+            window.tabbingMode = .disallowed
             window.contentView = NSHostingView(rootView: contentView)
             window.center()
+            window.setFrameAutosaveName("MeetOverlaySettings")
             window.isReleasedWhenClosed = false
             window.makeKeyAndOrderFront(nil)
             self.window = window
@@ -101,7 +103,7 @@ private final class PreferencesViewModel: ObservableObject {
     let reminderSounds = ReminderSoundCatalog.sounds
 
     var needsStartupAttention: Bool {
-        !["Enabled", "Disabled"].contains(loginItemStatus)
+        !calendarSyncDiagnostic.launchAtLogin.isHealthy
     }
 
     var calendarSelectionSummary: String {
@@ -311,7 +313,7 @@ private struct GeneralSettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: MeetOverlayTheme.Spacing.large) {
                 SettingsPageHeader(
                     title: "General",
                     subtitle: "Keep the menu quiet and the reminder behavior predictable."
@@ -385,8 +387,6 @@ private struct GeneralSettingsView: View {
                         .font(MeetOverlayTheme.Typography.helper)
                         .foregroundStyle(MeetOverlayTheme.Palette.warning)
                 }
-
-                Spacer()
             }
             .padding(MeetOverlayTheme.Spacing.page)
             .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -399,7 +399,7 @@ private struct CalendarSettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: MeetOverlayTheme.Spacing.large) {
                 SettingsPageHeader(
                     title: "Calendars",
                     subtitle: "Choose which synced calendars can appear in the menu and trigger reminders."
@@ -418,8 +418,6 @@ private struct CalendarSettingsView: View {
                         CalendarSelectionView(viewModel: viewModel)
                     }
                 }
-
-                Spacer()
             }
             .padding(MeetOverlayTheme.Spacing.page)
             .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -509,34 +507,48 @@ private struct SyncDoctorView: View {
     let diagnostic: CalendarSyncDiagnostic
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MeetOverlayTheme.Spacing.small) {
+        VStack(alignment: .leading, spacing: MeetOverlayTheme.Spacing.medium) {
             if let problem = diagnostic.problem {
                 CalendarSyncProblemBanner(problem: problem)
             }
 
-            SyncDoctorRow(item: diagnostic.calendarAccess)
-            SyncDoctorRow(item: diagnostic.includedCalendars)
-            SyncDoctorRow(item: diagnostic.launchAtLogin)
-            SyncDoctorRow(item: diagnostic.nextMeet)
+            VStack(alignment: .leading, spacing: MeetOverlayTheme.Spacing.small) {
+                SyncDoctorRow(item: diagnostic.calendarAccess)
+                SyncDoctorRow(item: diagnostic.includedCalendars)
+                SyncDoctorRow(item: diagnostic.launchAtLogin)
+                SyncDoctorRow(item: diagnostic.nextMeet)
+            }
         }
     }
 }
 
 private struct SyncDoctorRow: View {
+    private static let healthyColor = Color(nsColor: .systemGreen)
+    private static let statusIconWidth: CGFloat = 14
+
     let item: CalendarSyncDiagnosticItem
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: MeetOverlayTheme.Spacing.medium) {
+        HStack(alignment: .firstTextBaseline, spacing: MeetOverlayTheme.Spacing.small) {
+            Image(systemName: item.isHealthy ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .font(MeetOverlayTheme.Typography.helper.weight(.semibold))
+                .foregroundStyle(item.isHealthy ? Self.healthyColor : MeetOverlayTheme.Palette.attention)
+                .frame(width: Self.statusIconWidth)
+                .accessibilityLabel(item.isHealthy ? "OK" : "Needs attention")
+
             Text(item.title)
                 .font(MeetOverlayTheme.Typography.helper)
                 .foregroundStyle(.secondary)
+                .fixedSize()
 
-            Spacer()
+            Spacer(minLength: MeetOverlayTheme.Spacing.medium)
 
             Text(item.value)
                 .font(MeetOverlayTheme.Typography.helper.weight(.medium))
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.trailing)
+                .lineLimit(2)
+                .truncationMode(.tail)
         }
     }
 }
@@ -571,7 +583,7 @@ private struct CalendarSelectionView: View {
     @ObservedObject var viewModel: PreferencesViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: MeetOverlayTheme.Spacing.medium) {
             HStack {
                 Text(viewModel.calendarSelectionSummary)
                     .font(MeetOverlayTheme.Typography.helper)
@@ -593,7 +605,7 @@ private struct CalendarSelectionView: View {
 
             if !viewModel.calendars.isEmpty {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
+                    LazyVStack(alignment: .leading, spacing: MeetOverlayTheme.Spacing.small) {
                         ForEach(viewModel.calendars) { calendar in
                             CalendarToggleRow(viewModel: viewModel, calendar: calendar)
                         }
