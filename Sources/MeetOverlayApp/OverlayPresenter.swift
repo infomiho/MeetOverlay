@@ -110,6 +110,196 @@ private final class OverlayWindow: NSWindow {
     }
 }
 
+private enum OverlayStyle {
+    static let primaryHoverHighlight = Color.white.opacity(0.16)
+    static let primaryPressedShade = Color.black.opacity(0.1)
+    static let secondaryHoverFill = Color.white.opacity(0.13)
+    static let secondaryPressedFill = Color.white.opacity(0.05)
+    static let secondaryHoverBorder = Color.white.opacity(0.24)
+    static let keycapFill = Color.white.opacity(0.09)
+    static let keycapBorder = Color.white.opacity(0.16)
+    static let keycapOnAccentFill = Color.black.opacity(0.1)
+    static let keycapOnAccentText = Color.black.opacity(0.62)
+    static let keycapFont = Font.system(size: 12, weight: .semibold)
+    static let compactButtonFont = MeetOverlayTheme.Typography.overlayHint.weight(.semibold)
+    static let panelEntranceScale: CGFloat = 0.97
+    static let panelEntranceDuration: TimeInterval = 0.18
+}
+
+private struct OverlayPrimaryButtonStyle: ButtonStyle {
+    var minWidth: CGFloat = 172
+
+    func makeBody(configuration: Configuration) -> some View {
+        StyledLabel(configuration: configuration, minWidth: minWidth)
+    }
+
+    private struct StyledLabel: View {
+        let configuration: Configuration
+        let minWidth: CGFloat
+
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+        @State private var isHovered = false
+
+        var body: some View {
+            configuration.label
+                .font(MeetOverlayTheme.Typography.overlayButton.weight(.bold))
+                .foregroundStyle(.black)
+                .padding(.horizontal, 38)
+                .padding(.vertical, 17)
+                .frame(minWidth: minWidth)
+                .background(
+                    Capsule()
+                        .fill(MeetOverlayTheme.Palette.accent)
+                        .overlay(Capsule().fill(highlight))
+                )
+                .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+                .animation(.easeOut(duration: 0.12), value: isHovered)
+                .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
+                .onHover { isHovered = $0 }
+        }
+
+        private var highlight: Color {
+            if configuration.isPressed {
+                return OverlayStyle.primaryPressedShade
+            }
+
+            return isHovered ? OverlayStyle.primaryHoverHighlight : .clear
+        }
+    }
+}
+
+private struct OverlaySecondaryButtonStyle: ButtonStyle {
+    var compact = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        StyledLabel(configuration: configuration, compact: compact)
+    }
+
+    private struct StyledLabel: View {
+        let configuration: Configuration
+        let compact: Bool
+
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+        @State private var isHovered = false
+
+        var body: some View {
+            configuration.label
+                .font(compact ? OverlayStyle.compactButtonFont : MeetOverlayTheme.Typography.overlaySecondaryButton)
+                .foregroundStyle(
+                    isHovered
+                        ? MeetOverlayTheme.Palette.overlayText
+                        : MeetOverlayTheme.Palette.overlaySecondaryText
+                )
+                .padding(.horizontal, compact ? 14 : 20)
+                .padding(.vertical, compact ? 7 : 14)
+                .frame(minWidth: compact ? 0 : 112)
+                .background(Capsule().fill(fill))
+                .overlay(
+                    Capsule()
+                        .stroke(
+                            isHovered ? OverlayStyle.secondaryHoverBorder : MeetOverlayTheme.Palette.overlayPanelBorder,
+                            lineWidth: 1
+                        )
+                )
+                .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+                .animation(.easeOut(duration: 0.12), value: isHovered)
+                .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
+                .onHover { isHovered = $0 }
+        }
+
+        private var fill: Color {
+            if configuration.isPressed {
+                return OverlayStyle.secondaryPressedFill
+            }
+
+            return isHovered ? OverlayStyle.secondaryHoverFill : MeetOverlayTheme.Palette.overlayPanel
+        }
+    }
+}
+
+private struct KeycapHint: View {
+    enum Tone {
+        case onPanel
+        case onAccent
+    }
+
+    let symbol: String
+    var tone: Tone = .onPanel
+
+    var body: some View {
+        Text(symbol)
+            .font(OverlayStyle.keycapFont)
+            .foregroundStyle(
+                tone == .onAccent
+                    ? OverlayStyle.keycapOnAccentText
+                    : MeetOverlayTheme.Palette.overlayTertiaryText
+            )
+            .padding(.horizontal, 5)
+            .frame(minWidth: 20, minHeight: 20)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(tone == .onAccent ? OverlayStyle.keycapOnAccentFill : OverlayStyle.keycapFill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .stroke(tone == .onAccent ? Color.clear : OverlayStyle.keycapBorder, lineWidth: 1)
+            )
+            .accessibilityHidden(true)
+    }
+}
+
+private struct OverlayBackdropView: View {
+    var body: some View {
+        LinearGradient(
+            colors: [MeetOverlayTheme.Palette.overlayStart, MeetOverlayTheme.Palette.overlayEnd],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+    }
+}
+
+private struct OverlayPanelModifier: ViewModifier {
+    let maxWidth: CGFloat
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hasEntered = false
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, MeetOverlayTheme.Spacing.overlayPanelHorizontal)
+            .padding(.vertical, MeetOverlayTheme.Spacing.overlayPanelVertical)
+            .frame(maxWidth: maxWidth)
+            .background(
+                RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.overlayPanel)
+                    .fill(MeetOverlayTheme.Palette.overlayPanel)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.overlayPanel)
+                    .stroke(MeetOverlayTheme.Palette.overlayPanelBorder, lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.28), radius: 30, y: 18)
+            .padding(48)
+            .opacity(hasEntered ? 1 : 0)
+            .scaleEffect(hasEntered || reduceMotion ? 1 : OverlayStyle.panelEntranceScale)
+            .onAppear {
+                withAnimation(.easeOut(duration: OverlayStyle.panelEntranceDuration)) {
+                    hasEntered = true
+                }
+            }
+    }
+}
+
+extension View {
+    fileprivate func overlayPanel(maxWidth: CGFloat) -> some View {
+        modifier(OverlayPanelModifier(maxWidth: maxWidth))
+    }
+}
+
+private func meetingTimeRangeText(from startDate: Date, to endDate: Date) -> String {
+    "\(startDate.formatted(date: .omitted, time: .shortened)) to \(endDate.formatted(date: .omitted, time: .shortened))"
+}
+
 private struct MeetingOverlayView: View {
     let meeting: JoinableMeeting
     let onJoin: () -> Void
@@ -118,18 +308,14 @@ private struct MeetingOverlayView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [MeetOverlayTheme.Palette.overlayStart, MeetOverlayTheme.Palette.overlayEnd],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            OverlayBackdropView()
 
             VStack(spacing: MeetOverlayTheme.Spacing.overlayContent) {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     VStack(spacing: 12) {
                         Text(MeetingCountdownFormatter.text(now: context.date, startDate: meeting.startDate))
                             .font(MeetOverlayTheme.Typography.overlayStatus)
+                            .monospacedDigit()
                             .foregroundStyle(
                                 context.date >= meeting.startDate
                                     ? MeetOverlayTheme.Palette.attention
@@ -143,40 +329,40 @@ private struct MeetingOverlayView: View {
                             .lineLimit(2)
                             .minimumScaleFactor(0.5)
 
-                        Label(timeRangeText, systemImage: "clock")
-                            .font(MeetOverlayTheme.Typography.overlayMetadata)
-                            .foregroundStyle(MeetOverlayTheme.Palette.overlaySecondaryText)
+                        Label(
+                            meetingTimeRangeText(from: meeting.startDate, to: meeting.endDate),
+                            systemImage: "clock"
+                        )
+                        .font(MeetOverlayTheme.Typography.overlayMetadata)
+                        .foregroundStyle(MeetOverlayTheme.Palette.overlaySecondaryText)
                     }
                 }
 
                 HStack(spacing: 12) {
                     Button(action: onJoin) {
-                        Text(meeting.meetLinks.count > 1 ? "Join First Room" : "Join Room")
-                            .font(MeetOverlayTheme.Typography.overlayButton.weight(.bold))
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 38)
-                            .padding(.vertical, 17)
-                            .frame(minWidth: 172)
-                            .background(
-                                Capsule()
-                                    .fill(MeetOverlayTheme.Palette.accent)
-                            )
+                        HStack(spacing: 10) {
+                            Text(meeting.meetLinks.count > 1 ? "Join First Room" : "Join Room")
+                            KeycapHint(symbol: "⏎", tone: .onAccent)
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(OverlayPrimaryButtonStyle())
                     .keyboardShortcut(.defaultAction)
 
-                    secondaryButton("Snooze 1m", key: "1") {
+                    secondaryButton("Snooze 1m", keycap: "1", key: "1") {
                         onSnooze(60)
                     }
 
-                    secondaryButton("Snooze 5m", key: "5") {
+                    secondaryButton("Snooze 5m", keycap: "5", key: "5") {
                         onSnooze(5 * 60)
                     }
 
                     Button(action: onDismiss) {
-                        secondaryButtonLabel("Dismiss")
+                        HStack(spacing: 8) {
+                            Text("Dismiss")
+                            KeycapHint(symbol: "esc")
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(OverlaySecondaryButtonStyle())
                     .keyboardShortcut(.cancelAction)
                 }
                 .padding(.top, 4)
@@ -184,56 +370,22 @@ private struct MeetingOverlayView: View {
                 if meeting.meetLinks.count > 1 {
                     MeetLinkRescueView(links: meeting.meetLinks)
                 }
-
-                Text(meeting.meetLinks.count > 1 ? "Return joins the first room. 1 or 5 snoozes. Esc dismisses." : "Return joins the room. 1 or 5 snoozes. Esc dismisses.")
-                    .font(MeetOverlayTheme.Typography.overlayHint)
-                    .foregroundStyle(MeetOverlayTheme.Palette.overlayTertiaryText)
             }
-            .padding(.horizontal, MeetOverlayTheme.Spacing.overlayPanelHorizontal)
-            .padding(.vertical, MeetOverlayTheme.Spacing.overlayPanelVertical)
-            .frame(maxWidth: 840)
-            .background(
-                RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.overlayPanel)
-                    .fill(MeetOverlayTheme.Palette.overlayPanel)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.overlayPanel)
-                    .stroke(MeetOverlayTheme.Palette.overlayPanelBorder, lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.28), radius: 30, y: 18)
-            .padding(48)
+            .overlayPanel(maxWidth: 840)
         }
         .tint(MeetOverlayTheme.Palette.accent)
         .onExitCommand(perform: onDismiss)
     }
 
-    private var timeRangeText: String {
-        "\(meeting.startDate.formatted(date: .omitted, time: .shortened)) to \(meeting.endDate.formatted(date: .omitted, time: .shortened))"
-    }
-
-    private func secondaryButton(_ title: String, key: KeyEquivalent, action: @escaping () -> Void) -> some View {
+    private func secondaryButton(_ title: String, keycap: String, key: KeyEquivalent, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            secondaryButtonLabel(title)
+            HStack(spacing: 8) {
+                Text(title)
+                KeycapHint(symbol: keycap)
+            }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(OverlaySecondaryButtonStyle())
         .keyboardShortcut(key, modifiers: [])
-    }
-
-    private func secondaryButtonLabel(_ title: String) -> some View {
-        Text(title)
-            .font(MeetOverlayTheme.Typography.overlaySecondaryButton)
-            .foregroundStyle(MeetOverlayTheme.Palette.overlaySecondaryText)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
-            .frame(minWidth: 112)
-            .background(
-                Capsule()
-                    .fill(MeetOverlayTheme.Palette.overlayPanel)
-            )
-            .overlay(
-                Capsule()
-                    .stroke(MeetOverlayTheme.Palette.overlayPanelBorder, lineWidth: 1)
-            )
     }
 }
 
@@ -248,18 +400,14 @@ private struct BackToBackAirlockView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [MeetOverlayTheme.Palette.overlayStart, MeetOverlayTheme.Palette.overlayEnd],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            OverlayBackdropView()
 
             VStack(spacing: 18) {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     VStack(spacing: 10) {
                         Text(MeetingCountdownFormatter.text(now: context.date, startDate: nextMeeting.startDate))
                             .font(MeetOverlayTheme.Typography.overlayStatus)
+                            .monospacedDigit()
                             .foregroundStyle(MeetOverlayTheme.Palette.accent)
 
                         Text(nextMeeting.title)
@@ -269,9 +417,12 @@ private struct BackToBackAirlockView: View {
                             .lineLimit(2)
                             .minimumScaleFactor(0.55)
 
-                        Label(timeRangeText, systemImage: "clock")
-                            .font(MeetOverlayTheme.Typography.overlayMetadata)
-                            .foregroundStyle(MeetOverlayTheme.Palette.overlaySecondaryText)
+                        Label(
+                            meetingTimeRangeText(from: nextMeeting.startDate, to: nextMeeting.endDate),
+                            systemImage: "clock"
+                        )
+                        .font(MeetOverlayTheme.Typography.overlayMetadata)
+                        .foregroundStyle(MeetOverlayTheme.Palette.overlaySecondaryText)
                     }
                 }
 
@@ -281,59 +432,29 @@ private struct BackToBackAirlockView: View {
 
                 HStack(spacing: 12) {
                     Button(action: onJoin) {
-                        Text("Join Next Room")
-                            .font(MeetOverlayTheme.Typography.overlayButton.weight(.bold))
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 38)
-                            .padding(.vertical, 17)
-                            .frame(minWidth: 210)
-                            .background(Capsule().fill(MeetOverlayTheme.Palette.accent))
+                        HStack(spacing: 10) {
+                            Text("Join Next Room")
+                            KeycapHint(symbol: "⏎", tone: .onAccent)
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(OverlayPrimaryButtonStyle(minWidth: 210))
                     .keyboardShortcut(.defaultAction)
 
                     Button(action: onDismiss) {
-                        secondaryButtonLabel("Dismiss")
+                        HStack(spacing: 8) {
+                            Text("Dismiss")
+                            KeycapHint(symbol: "esc")
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(OverlaySecondaryButtonStyle())
                     .keyboardShortcut(.cancelAction)
                 }
                 .padding(.top, 4)
             }
-            .padding(.horizontal, MeetOverlayTheme.Spacing.overlayPanelHorizontal)
-            .padding(.vertical, MeetOverlayTheme.Spacing.overlayPanelVertical)
-            .frame(maxWidth: 780)
-            .background(
-                RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.overlayPanel)
-                    .fill(MeetOverlayTheme.Palette.overlayPanel)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: MeetOverlayTheme.Radius.overlayPanel)
-                    .stroke(MeetOverlayTheme.Palette.overlayPanelBorder, lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.28), radius: 30, y: 18)
-            .padding(48)
+            .overlayPanel(maxWidth: 780)
         }
         .tint(MeetOverlayTheme.Palette.accent)
         .onExitCommand(perform: onDismiss)
-    }
-
-    private var timeRangeText: String {
-        "\(nextMeeting.startDate.formatted(date: .omitted, time: .shortened)) to \(nextMeeting.endDate.formatted(date: .omitted, time: .shortened))"
-    }
-
-    private func secondaryButtonLabel(_ title: String) -> some View {
-        Text(title)
-            .font(MeetOverlayTheme.Typography.overlaySecondaryButton)
-            .foregroundStyle(MeetOverlayTheme.Palette.overlaySecondaryText)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
-            .frame(minWidth: 112)
-            .background(Capsule().fill(MeetOverlayTheme.Palette.overlayPanel))
-            .overlay(
-                Capsule()
-                    .stroke(MeetOverlayTheme.Palette.overlayPanelBorder, lineWidth: 1)
-            )
     }
 }
 
@@ -357,12 +478,12 @@ private struct MeetLinkRescueView: View {
                     Button("Open") {
                         open(link)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(OverlaySecondaryButtonStyle(compact: true))
 
                     Button("Copy") {
                         copy(link)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(OverlaySecondaryButtonStyle(compact: true))
                 }
             }
         }
