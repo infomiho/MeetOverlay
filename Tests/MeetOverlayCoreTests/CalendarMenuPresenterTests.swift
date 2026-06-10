@@ -335,12 +335,100 @@ final class CalendarMenuPresenterTests: XCTestCase {
         XCTAssertEqual(sections[0].rows.map(\.title), ["Finished", "Upcoming"])
     }
 
+    func testMenuBarTitleSkipsDeclinedMeetAndUsesNextAcceptedMeet() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 16, minute: 0, calendar: calendar)
+        let declinedMeet = makeEvent(
+            id: "declined",
+            title: "Declined",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 16, minute: 10, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 16, minute: 40, calendar: calendar),
+            participationStatus: .declined,
+            notes: "https://meet.google.com/abc-defg-hij"
+        )
+        let acceptedMeet = makeEvent(
+            id: "accepted",
+            title: "Accepted",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 16, minute: 40, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 17, minute: 10, calendar: calendar),
+            notes: "https://meet.google.com/xyz-abcd-efg"
+        )
+
+        let title = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .menuBarTitle(now: now, events: [declinedMeet, acceptedMeet])
+
+        XCTAssertEqual(title, "Accepted 40m")
+    }
+
+    func testMenuBarPresentationSkipsDeclinedInProgressMeet() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 16, minute: 5, calendar: calendar)
+        let declinedInProgress = makeEvent(
+            id: "declined",
+            title: "Declined",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 16, minute: 0, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 16, minute: 30, calendar: calendar),
+            participationStatus: .declined,
+            notes: "https://meet.google.com/abc-defg-hij"
+        )
+        let acceptedUpcoming = makeEvent(
+            id: "accepted",
+            title: "Accepted",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 16, minute: 20, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 16, minute: 50, calendar: calendar),
+            notes: "https://meet.google.com/xyz-abcd-efg"
+        )
+
+        let presentation = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .menuBarPresentation(now: now, events: [declinedInProgress, acceptedUpcoming])
+
+        XCTAssertEqual(presentation, CalendarMenuBarPresentation(title: "Accepted 15m", urgency: .upcoming))
+    }
+
+    func testMenuBarPresentationIsIdleWhenOnlyDeclinedMeetRemains() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 16, minute: 0, calendar: calendar)
+        let declinedMeet = makeEvent(
+            id: "declined",
+            title: "Declined",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 16, minute: 10, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 16, minute: 40, calendar: calendar),
+            participationStatus: .declined,
+            notes: "https://meet.google.com/abc-defg-hij"
+        )
+
+        let presentation = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .menuBarPresentation(now: now, events: [declinedMeet])
+
+        XCTAssertEqual(presentation, CalendarMenuBarPresentation(title: "Meet", urgency: .idle))
+    }
+
+    func testDeclinedActiveMeetIsNotHighlightedButStaysInTimeline() throws {
+        let calendar = fixedCalendar()
+        let now = date(year: 2026, month: 6, day: 3, hour: 14, minute: 5, calendar: calendar)
+        let declinedActiveMeet = makeEvent(
+            id: "declined",
+            title: "Declined",
+            startDate: date(year: 2026, month: 6, day: 3, hour: 14, minute: 0, calendar: calendar),
+            endDate: date(year: 2026, month: 6, day: 3, hour: 14, minute: 30, calendar: calendar),
+            participationStatus: .declined,
+            notes: "https://meet.google.com/abc-defg-hij"
+        )
+
+        let sections = CalendarMenuPresenter(calendar: calendar, locale: Locale(identifier: "en_GB"))
+            .sections(now: now, events: [declinedActiveMeet])
+
+        XCTAssertEqual(sections.map(\.title), ["Today's Events"])
+        XCTAssertEqual(sections[0].rows.map(\.title), ["Declined"])
+    }
+
     private func makeEvent(
         id: String,
         title: String,
         startDate: Date,
         endDate: Date,
         isAllDay: Bool = false,
+        participationStatus: EventParticipationStatus = .accepted,
         url: URL? = nil,
         notes: String? = nil,
         location: String? = nil
@@ -351,7 +439,7 @@ final class CalendarMenuPresenterTests: XCTestCase {
             startDate: startDate,
             endDate: endDate,
             isAllDay: isAllDay,
-            participationStatus: .accepted,
+            participationStatus: participationStatus,
             url: url,
             notes: notes,
             location: location

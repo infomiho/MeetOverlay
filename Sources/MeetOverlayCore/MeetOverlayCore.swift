@@ -151,6 +151,12 @@ public struct CalendarEventSnapshot: Equatable {
     }
 }
 
+public extension CalendarEventSnapshot {
+    var meetLinks: [URL] {
+        GoogleMeetLinkFinder.links(in: [url?.absoluteString, notes, location, title].compactMap { $0 })
+    }
+}
+
 public enum CalendarEventFilter {
     public static func events(
         _ events: [CalendarEventSnapshot],
@@ -323,11 +329,7 @@ public struct CalendarSyncDiagnostic: Equatable {
     ) -> String {
         CalendarEventFilter.events(events, selectedCalendarIDs: selectedCalendarIDs)
             .filter { $0.endDate > now }
-            .filter { !$0.isAllDay }
-            .filter { $0.participationStatus != .declined }
-            .filter { event in
-                GoogleMeetLinkFinder.firstLink(in: [event.url?.absoluteString, event.notes, event.location, event.title].compactMap { $0 }) != nil
-            }
+            .filter { JoinableMeeting.from($0) != nil }
             .sorted { $0.startDate < $1.startDate }
             .first?
             .title ?? "No upcoming Google Meet events"
@@ -380,9 +382,7 @@ public struct BackToBackAirlock {
         dismissedTransitionEventIDs: Set<String>
     ) -> BackToBackTransition? {
         let joinableEvents = events
-            .filter { !$0.isAllDay }
-            .filter { $0.participationStatus != .declined }
-            .filter { JoinableMeetingFactory.meeting(from: $0) != nil }
+            .filter { JoinableMeeting.from($0) != nil }
 
         guard let current = joinableEvents
             .filter({ $0.startDate <= now })
@@ -401,7 +401,7 @@ public struct BackToBackAirlock {
             .filter({ $0.startDate >= current.endDate })
             .filter({ $0.startDate <= current.endDate.addingTimeInterval(maximumGap) })
             .sorted(by: { $0.startDate < $1.startDate })
-            .compactMap(JoinableMeetingFactory.meeting)
+            .compactMap(JoinableMeeting.from)
             .first else {
             return nil
         }
@@ -436,10 +436,8 @@ public struct MeetingAlertLadder {
                 guard event.endDate > now else { return nil }
                 guard event.startDate <= now.addingTimeInterval(gentleLeadTime) else { return nil }
                 guard event.startDate >= now.addingTimeInterval(-lateAlertGraceTime) else { return nil }
-                guard !event.isAllDay else { return nil }
-                guard event.participationStatus != .declined else { return nil }
                 guard !hiddenEventIDs.contains(event.id) else { return nil }
-                guard let meeting = JoinableMeetingFactory.meeting(from: event) else { return nil }
+                guard let meeting = JoinableMeeting.from(event) else { return nil }
 
                 let stage: MeetingAlertStage = event.startDate <= now.addingTimeInterval(fullscreenLeadTime) ? .fullscreen : .gentle
                 return MeetingAlert(stage: stage, meeting: meeting)
@@ -448,10 +446,12 @@ public struct MeetingAlertLadder {
     }
 }
 
-private enum JoinableMeetingFactory {
-    static func meeting(from event: CalendarEventSnapshot) -> JoinableMeeting? {
-        let candidates = [event.url?.absoluteString, event.notes, event.location, event.title].compactMap { $0 }
-        let meetLinks = GoogleMeetLinkFinder.links(in: candidates)
+public extension JoinableMeeting {
+    static func from(_ event: CalendarEventSnapshot) -> JoinableMeeting? {
+        guard !event.isAllDay else { return nil }
+        guard event.participationStatus != .declined else { return nil }
+
+        let meetLinks = event.meetLinks
         guard let meetURL = meetLinks.first else { return nil }
 
         return JoinableMeeting(
@@ -532,11 +532,9 @@ public struct MeetingAlertSelector {
                 guard event.endDate > now else { return nil }
                 guard event.startDate <= now.addingTimeInterval(alertLeadTime) else { return nil }
                 guard event.startDate >= now.addingTimeInterval(-lateAlertGraceTime) else { return nil }
-                guard !event.isAllDay else { return nil }
-                guard event.participationStatus != .declined else { return nil }
                 guard !hiddenEventIDs.contains(event.id) else { return nil }
 
-                return JoinableMeetingFactory.meeting(from: event)
+                return JoinableMeeting.from(event)
             }
             .first
     }
@@ -615,9 +613,8 @@ public struct CalendarMenuPresenter {
     public func menuBarPresentation(now: Date, events: [CalendarEventSnapshot]) -> CalendarMenuBarPresentation {
         let meetEvents = events
             .filter({ calendar.isDate($0.startDate, inSameDayAs: now) })
-            .filter({ !$0.isAllDay })
             .filter({ $0.endDate > now })
-            .filter({ meetURL(for: $0) != nil })
+            .filter({ JoinableMeeting.from($0) != nil })
 
         if let activeEvent = meetEvents
             .filter({ $0.startDate <= now })
@@ -666,8 +663,7 @@ public struct CalendarMenuPresenter {
     private func highlightSections(now: Date, events: [CalendarEventSnapshot]) -> [CalendarMenuSection] {
         let meetEvents = events
             .filter { calendar.isDate($0.startDate, inSameDayAs: now) }
-            .filter { !$0.isAllDay }
-            .filter { meetURL(for: $0) != nil }
+            .filter { JoinableMeeting.from($0) != nil }
 
         let activeMeet = meetEvents
             .filter { $0.startDate <= now && $0.endDate > now }
@@ -706,7 +702,7 @@ public struct CalendarMenuPresenter {
     }
 
     private func row(for event: CalendarEventSnapshot, now: Date) -> CalendarMenuRow {
-        let meetLinks = meetLinks(for: event)
+        let meetLinks = event.meetLinks
 
         return CalendarMenuRow(
             eventID: event.id,
@@ -717,14 +713,6 @@ public struct CalendarMenuPresenter {
             meetURL: meetLinks.first,
             meetLinks: meetLinks
         )
-    }
-
-    private func meetURL(for event: CalendarEventSnapshot) -> URL? {
-        meetLinks(for: event).first
-    }
-
-    private func meetLinks(for event: CalendarEventSnapshot) -> [URL] {
-        GoogleMeetLinkFinder.links(in: [event.url?.absoluteString, event.notes, event.location, event.title].compactMap { $0 })
     }
 
     private func timing(now: Date, event: CalendarEventSnapshot) -> MenuEventTiming {
