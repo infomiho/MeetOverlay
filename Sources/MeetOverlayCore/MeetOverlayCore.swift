@@ -578,11 +578,19 @@ public struct CalendarMenuSection: Equatable {
     public let rows: [CalendarMenuRow]
 }
 
+public enum CalendarMenuRowPhase: Equatable {
+    case allDay
+    case upcoming
+    case inProgress
+    case ended
+}
+
 public struct CalendarMenuRow: Equatable {
     public let eventID: String
     public let title: String
     public let timeText: String
     public let statusText: String?
+    public let phase: CalendarMenuRowPhase
     public let hasMeetLink: Bool
     public let meetURL: URL?
     public let meetLinks: [URL]
@@ -742,10 +750,26 @@ public struct CalendarMenuPresenter {
             title: event.title,
             timeText: event.isAllDay ? "All-day" : timeFormatter.string(from: event.startDate),
             statusText: statusText(now: now, event: event),
+            phase: phase(now: now, event: event),
             hasMeetLink: !meetLinks.isEmpty,
             meetURL: meetLinks.first,
             meetLinks: meetLinks
         )
+    }
+
+    private func phase(now: Date, event: CalendarEventSnapshot) -> CalendarMenuRowPhase {
+        guard !event.isAllDay else {
+            return .allDay
+        }
+
+        switch timing(now: now, event: event) {
+        case .future:
+            return .upcoming
+        case .starting, .active:
+            return .inProgress
+        case .ended:
+            return .ended
+        }
     }
 
     private func timing(now: Date, event: CalendarEventSnapshot) -> MenuEventTiming {

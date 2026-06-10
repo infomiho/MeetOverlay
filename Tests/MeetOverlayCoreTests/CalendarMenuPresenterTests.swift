@@ -26,11 +26,13 @@ final class CalendarMenuPresenterTests: XCTestCase {
         XCTAssertEqual(sections.map(\.title), ["Today's Events", "Tomorrow's Events"])
         XCTAssertEqual(sections[0].rows[0].title, "Planning")
         XCTAssertEqual(sections[0].rows[0].timeText, "17:00")
+        XCTAssertEqual(sections[0].rows[0].phase, .upcoming)
         XCTAssertTrue(sections[0].rows[0].hasMeetLink)
         XCTAssertEqual(sections[0].rows[0].meetURL?.absoluteString, "https://meet.google.com/abc-defg-hij")
         XCTAssertEqual(sections[0].rows[0].meetLinks.map(\.absoluteString), ["https://meet.google.com/abc-defg-hij"])
         XCTAssertEqual(sections[1].rows[0].title, "Admin day")
         XCTAssertEqual(sections[1].rows[0].timeText, "All-day")
+        XCTAssertEqual(sections[1].rows[0].phase, .allDay)
         XCTAssertFalse(sections[1].rows[0].hasMeetLink)
         XCTAssertNil(sections[1].rows[0].meetURL)
         XCTAssertEqual(sections[1].rows[0].meetLinks, [])
@@ -213,8 +215,10 @@ final class CalendarMenuPresenterTests: XCTestCase {
         XCTAssertEqual(sections.map(\.title), ["Happening Now", "Next Up"])
         XCTAssertEqual(sections[0].rows[0].title, "[ALL] Sprint R&R")
         XCTAssertEqual(sections[0].rows[0].statusText, "now")
+        XCTAssertEqual(sections[0].rows[0].phase, .inProgress)
         XCTAssertEqual(sections[1].rows[0].title, "[DEV] Sprint R&R")
         XCTAssertEqual(sections[1].rows[0].statusText, "in 1h")
+        XCTAssertEqual(sections[1].rows[0].phase, .upcoming)
     }
 
     func testMenuBarTitleShowsHoursAndRemainingMinutesWhenStartIsOverOneHourAway() throws {
@@ -333,6 +337,7 @@ final class CalendarMenuPresenterTests: XCTestCase {
             .sections(now: now, events: [finishedEvent, upcomingEvent], hideFinishedEvents: false)
 
         XCTAssertEqual(sections[0].rows.map(\.title), ["Finished", "Upcoming"])
+        XCTAssertEqual(sections[0].rows.map(\.phase), [.ended, .upcoming])
     }
 
     func testMenuBarTitleSkipsDeclinedMeetAndUsesNextAcceptedMeet() throws {
